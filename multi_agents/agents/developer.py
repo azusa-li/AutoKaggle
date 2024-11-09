@@ -42,51 +42,45 @@ class Developer(Agent):
         return os.path.exists(path_to_previous_code), path_to_previous_code, path_to_previous_run_code, path_to_last_phase_code
 
     def _delete_output_in_code(self, state: State, previous_code) -> str:
-        previous_run_code = copy.deepcopy(previous_code) # 深拷贝 防止修改原始数据
+        previous_run_code = copy.deepcopy(previous_code) # deep copy to prevent modifying the original data
         keywords = ('sns.', '.plot', '.hist', '.plt')
 
-        # 第一次扫描：识别 for 循环，整段替换
+        # first scan: identify for loops, replace the whole block
         for_loop_list = []
         in_for_loop = False
         # pdb.set_trace()
         for i, line in enumerate(previous_run_code):
             if line.startswith('    for'):
                 tmp_loop = []
-                indent = line[:len(line) - len(line.lstrip())]  # 获取缩进部分
-                tmp_loop.append(i) # 记录for循环的起始行
-                # print(i)
+                indent = line[:len(line) - len(line.lstrip())]  # get the indent part
+                tmp_loop.append(i) # record the start line of the for loop
                 in_for_loop = True
             elif in_for_loop and line.startswith(indent) and not line.startswith('    '+indent) and len(line.strip()) > 0:
-                tmp_loop.append(i) # 记录for循环的终止行
-                # print(i)
+                tmp_loop.append(i) # record the end line of the for loop
                 in_for_loop = False
                 for_loop_list.append(tmp_loop)
 
-        # if len(for_loop_list) > 0:
-        #     logger.info(f"for_loop_list: {for_loop_list}")
-
-        # 逆序替换 for 循环为 '    pass'
+        # reverse order replace for loops with '    pass'
         for start, end in for_loop_list[::-1]:
             loop_code = "\n".join(previous_run_code[start:end])
-            if any(keyword in loop_code for keyword in keywords):  # 如果 for 循环中包含关键字
-                previous_run_code[start:end] = ['    pass\n']  # 替换相应行
+            if any(keyword in loop_code for keyword in keywords):  # if the for loop contains keywords
+                previous_run_code[start:end] = ['    pass\n']  # replace the corresponding lines
 
-        # 第二次扫描：替换 print 和 plt.show / plt.save 行，保留缩进
-        # pdb.set_trace()
+        # second scan: replace print and plt.show / plt.save lines, keep the indent
         start_signs = ('print', 'plt')
         for i, line in enumerate(previous_run_code):
             stripped_line = line.lstrip()
             if stripped_line.startswith(start_signs) or any(keyword in stripped_line for keyword in keywords):
-                indent = line[:len(line) - len(stripped_line)]  # 获取缩进部分
+                indent = line[:len(line) - len(stripped_line)]  # get the indent part
                 previous_run_code[i] = indent + 'pass\n'
         
-        # 第三次扫描：合并连续的 pass 行
+        # third scan: merge consecutive pass lines
         new_code = []
         pass_found = False
         
         for line in previous_run_code:
             if line.strip() == 'pass':
-                if not pass_found:  # 第一次遇到 pass
+                if not pass_found:  # first time encounter pass
                     new_code.append(line)
                     pass_found = True
             else:
@@ -100,9 +94,9 @@ class Developer(Agent):
         if is_previous_code:
             with open(path_to_previous_code, 'r', encoding='utf-8') as f_1:
                 previous_code = f_1.readlines()
-                previous_code = previous_code[:-2] # 删除最后两行
-                previous_code = previous_code[9:] # 删除前9行
-            previous_run_code = self._delete_output_in_code(state, previous_code) # 删除output
+                previous_code = previous_code[:-2] # delete the last two lines
+                previous_code = previous_code[9:] # delete the first nine lines
+            previous_run_code = self._delete_output_in_code(state, previous_code) # delete output
         else:
             previous_code = []
             previous_run_code = []
@@ -127,7 +121,7 @@ class Developer(Agent):
             no_code_flag = True
             return True, "no code", "no code"
         
-        with open(f'{state.restore_dir}/single_phase_code.txt', 'w') as f: # 保存单步的code
+        with open(f'{state.restore_dir}/single_phase_code.txt', 'w') as f: # save the single phase code
             f.write("\n".join(matches))
 
         prefix_in_code_file = [line + '\n' for line in PREFIX_IN_CODE_FILE.split('\n')]        
@@ -176,13 +170,13 @@ class Developer(Agent):
         result = {}
         # timeout
         if 'Analysis' in state.phase:
-            timeout = 600
+            timeout = 1200
             timeout_info = "Your code is running out of time, please consider resource availability and reduce the number of data analysis plots drawn."
         elif 'Model' in state.phase:
-            timeout = 1200
+            timeout = 2400
             timeout_info = "Your code is running out of time, please consider resource availability and try fewer models."
         else:
-            timeout = 300
+            timeout = 600
             timeout_info = "Your code is running out of time, please consider resource availability or other factors."
         try:
             result = subprocess.run(['python3', '-W', 'ignore', path_to_run_code], 
@@ -218,6 +212,7 @@ class Developer(Agent):
                 error_flag = True
             else:
                 logger.info("Code executed successfully without errors.")
+                self._save_all_error_messages(state)
                 self.all_error_messages = []
                 try:
                     os.remove(path_to_error)
@@ -233,13 +228,28 @@ class Developer(Agent):
             with open(path_to_output, 'w') as f:
                 f.write("")
 
-        # 在这里如果error信息太长 可以读取做去重
         return error_flag
+    
+    def _save_all_error_messages(self, state: State):
+        if self.all_error_messages:
+            base_filename = f'{state.restore_dir}/all_error_messages.txt'
+            filename = base_filename
+            counter = 1
+
+            while os.path.exists(filename):
+                filename = f'{state.restore_dir}/all_error_messages_{counter}.txt'
+                counter += 1
+
+            with open(filename, 'w', encoding='utf-8') as f:
+                for i, message in enumerate(self.all_error_messages):
+                    f.write(f"Message {i+1}:\n{message}\n\n\n")
+            
+            logger.info(f"All error messages saved to {filename}")
 
     def _conduct_unit_test(self, state: State) -> None:
-        test_tool = TestTool(memory=None, model='gpt-4o', type='api')
+        test_tool = TestTool(memory=None, model=self.model, type='api')
         not_pass_flag = False
-        not_pass_tests = test_tool.execute_tests(state) # [(test1_number, test1_information), ...] 全通过返回[]
+        not_pass_tests = test_tool.execute_tests(state) # [(test1_number, test1_information), ...] if all pass return []
         logger.info(f"There are {len(not_pass_tests)} not pass tests.")
         not_pass_information = ""
         if not_pass_tests:
@@ -274,12 +284,17 @@ class Developer(Agent):
         code_lines = []
         for match in matches:
             code_lines.extend(match.split('\n'))
-        wrong_code = "\n".join(code_lines) # 这里的code是有错误的
-        # 读取error和output
+        wrong_code = "\n".join(code_lines) # the code with error
+        # read error and output
         path_to_error = f'{state.restore_dir}/{state.dir_name}_error.txt'
         path_to_output = f'{state.restore_dir}/{state.dir_name}_output.txt'
         if os.path.exists(path_to_error):
             error_messages = read_file(path_to_error)
+            if len(error_messages) > 10000:
+                error_messages = error_messages[:10000] # truncate the error messages
+                logger.info(f"The error messages are truncated to 10000 characters.")
+                with open(f'{state.restore_dir}/{state.dir_name}_error_truncated.txt', 'w') as f:
+                    f.write(error_messages)
         else:
             error_messages = "There is no error message in the previous phase."
         if state.phase in ['Feature Engineering', 'Model Building, Validation, and Prediction']:
@@ -299,7 +314,7 @@ class Developer(Agent):
 
     def _generate_prompt_round0(self, state: State) -> str:
         prompt_round1 = ""
-        # 读取上一个阶段的code
+        # read the code from the previous phase
         is_previous_code, path_to_previous_code, _, path_to_last_phase_code = self._is_previous_code(state)
         if is_previous_code:
             previous_code = read_file(path_to_last_phase_code)
@@ -316,7 +331,7 @@ class Developer(Agent):
         return prompt_round1
 
     def _execute(self, state: State, role_prompt: str) -> Dict[str, Any]:
-        # 实现开发和调试功能
+        # implement the development and debugging function
         history = []
         debug_history = []
         test_history = []
@@ -333,45 +348,55 @@ class Developer(Agent):
         competition_path = state.competition_dir
         task = PROMPT_DEVELOPER_TASK
         constraints = PROMPT_DEVELOPER_CONSTRAINTS.format(restore_path=restore_path, competition_path=competition_path, phase_name=state.phase)
-        with open(f'{state.competition_dir}/competition_info.txt', 'r') as f:
-            competition_info = f.read()
-        plan = state.memory[-1]["planner"]["plan"] # 这里plan的格式是markdown
+        background_info = state.background_info
+        state_info = state.get_state_info()
 
-        if len(state.memory) == 1: # 如果之前没有memory，说明是第一次执行
-            history.append({"role": "system", "content": f"{role_prompt}{self.description}\n when you are writing code, you should follow the plan and the following constraints.\n{constraints}"})
+        plan = state.memory[-1]["planner"]["plan"] # the format of plan is markdown
+
+        if len(state.memory) == 1: # if there is no memory before, it means it is the first execution
+            if self.model == 'gpt-4o':
+                history.append({"role": "system", "content": f"{role_prompt}{self.description}\n when you are writing code, you should follow the plan and the following constraints.\n{constraints}"})
+            elif self.model == 'o1-mini':
+                history.append({"role": "user", "content": f"{role_prompt}{self.description}\n when you are writing code, you should follow the plan and the following constraints.\n{constraints}"})
         else:
             self.description = "You are skilled at writing and implementing code according to plan." \
                             "You have advanced reasoning abilities and can improve your answers through reflection."
             experience_with_suggestion = self._gather_experience_with_suggestion(state)
-            history.append({"role": "system", "content": f"{role_prompt}{self.description}\n when you are writing code, you should follow the plan and the following constraints.\n{constraints}"})
+            if self.model == 'gpt-4o':
+                history.append({"role": "system", "content": f"{role_prompt}{self.description}\n when you are writing code, you should follow the plan and the following constraints.\n{constraints}"})
+            elif self.model == 'o1-mini':
+                history.append({"role": "user", "content": f"{role_prompt}{self.description}\n when you are writing code, you should follow the plan and the following constraints.\n{constraints}"})
+
 
         while round <= max_tries:
             if round == 0 or retry_flag or no_code_flag:
                 if len(state.memory) == 1:
-                    input = PROMPT_DEVELOPER.format(phases_in_context=state.context, phase_name=state.phase, state_info=state.get_state_info(), competition_info=competition_info, plan=plan,task=task)
+                    input = PROMPT_DEVELOPER.format(phases_in_context=state.context, phase_name=state.phase, state_info=state_info, background_info=background_info, plan=plan,task=task)
                     if retry_flag or no_code_flag: # Reset history to initial system message if retrying or no code was generated
                         history = history[:1]
-                    raw_reply, history = self.llm.generate(input, history, max_tokens=4096)
+                    raw_reply, history = self.llm.generate(input, history, max_completion_tokens=4096)
                     prompt_round0 = self._generate_prompt_round0(state)
                     input = prompt_round0
-                    raw_reply, history = self.llm.generate(input, history, max_tokens=4096)
+                    raw_reply, history = self.llm.generate(input, history, max_completion_tokens=4096)
                 else:
-                    input = PROMPT_DEVELOPER_WITH_EXPERIENCE_ROUND0_0.format(phases_in_context=state.context, phase_name=state.phase, state_info=state.get_state_info(), competition_info=competition_info, plan=plan, task=task, experience_with_suggestion=experience_with_suggestion)
-                    raw_reply, history = self.llm.generate(input, history, max_tokens=4096)
+                    input = PROMPT_DEVELOPER_WITH_EXPERIENCE_ROUND0_0.format(phases_in_context=state.context, phase_name=state.phase, state_info=state_info, background_info=background_info, plan=plan, task=task, experience_with_suggestion=experience_with_suggestion)
+                    raw_reply, history = self.llm.generate(input, history, max_completion_tokens=4096)
                     prompt_round0 = self._generate_prompt_round0(state)
                     input = prompt_round0
-                    raw_reply, history = self.llm.generate(input, history, max_tokens=4096)
+                    raw_reply, history = self.llm.generate(input, history, max_completion_tokens=4096)
                     with open(f'{state.restore_dir}/{self.role}_first_mid_reply.txt', 'w') as f:
                         f.write(raw_reply)
                     input = PROMPT_DEVELOPER_WITH_EXPERIENCE_ROUND0_2
-                    raw_reply, history = self.llm.generate(input, history, max_tokens=4096)
+                    raw_reply, history = self.llm.generate(input, history, max_completion_tokens=4096)
                 if retry_flag:
-                    self.all_error_messages = [] # retry后清空error messages
+                    self._save_all_error_messages(state)
+                    self.all_error_messages = [] # clear the error messages after retry
                     logger.info("The developer asks for help when debugging the code. Regenerating the code.")
                     with open(f'{state.restore_dir}/{self.role}_retry_reply.txt', 'w') as f:
                         f.write(raw_reply)
                 elif no_code_flag:
-                    self.all_error_messages = [] # 清空error messages
+                    self._save_all_error_messages(state)
+                    self.all_error_messages = [] # clear the error messages
                     logger.info("Last reply has no code. Regenerating the code.")
                     with open(f'{state.restore_dir}/{self.role}_no_code_reply.txt', 'w') as f:
                         f.write(raw_reply)
@@ -380,22 +405,22 @@ class Developer(Agent):
                         f.write(raw_reply)
                 retry_flag = False
             elif round >= 1:
-                if error_flag and round < max_tries: # 如果最后一轮还有错，就不再debug
-                    # 每一轮单独debug
-                    raw_reply, single_round_debug_history = self._debug_code(state, error_flag, not_pass_flag, not_pass_information, raw_reply) # 这里我先把develop和debug解耦 后续便于加上retrieve history然后debug
-                    debug_history.append(single_round_debug_history) # 没必要深拷贝
+                if error_flag and round < max_tries: # if there is still error in the last round, do not debug
+                    # debug in each round
+                    raw_reply, single_round_debug_history = self._debug_code(state, error_flag, not_pass_flag, not_pass_information, raw_reply)
+                    debug_history.append(single_round_debug_history)
                     if raw_reply == "HELP":
                         logger.info("The developer asks for help when debugging the code. Regenerating the code.")
                         retry_flag = True
-                elif not error_flag: # 如果没有错误
-                    # 进行unit test 如果根据unit test修改后的code存在问题 
+                elif not error_flag: # if there is no error
+                    # conduct unit test
                     while test_round < 2*max_tries and not error_flag:
                         logger.info(f"Start the {test_round+1}-th unit test.")
                         not_pass_flag, not_pass_information = self._conduct_unit_test(state)
-                        if not_pass_flag: # 如果unit test不通过 进行debug test 假设run code又出错 就要重新debug code
+                        if not_pass_flag: # if the unit test is not passed
                             raw_reply, single_round_test_history = self._debug_code(state, error_flag, not_pass_flag, not_pass_information, raw_reply)
                             test_history.append(single_round_test_history)
-                            no_code_flag, _, path_to_run_code = self._generate_code_file(state, raw_reply) # 这里后面再重复一遍生成文件和运行代码也没事 因为这里不涉及llm生成代码 raw_reply是一样的
+                            no_code_flag, _, path_to_run_code = self._generate_code_file(state, raw_reply) # regenerate the code file
                             error_flag = self._run_code(state, no_code_flag, path_to_run_code)
                         else:
                             break
@@ -412,7 +437,7 @@ class Developer(Agent):
                 error_flag = self._run_code(state, no_code_flag, path_to_run_code)
             round += 1
 
-        # 保存history
+        # save history
         with open(f'{state.restore_dir}/{self.role}_history.json', 'w') as f:
             json.dump(history, f, indent=4)
         with open(f'{state.restore_dir}/debug_history.json', 'w') as f:
@@ -433,7 +458,7 @@ class Developer(Agent):
             else:
                 logger.info(f"State {state.phase} - Agent {self.role} finishes working.")
 
-        input_used_in_review = f"   <competition_info>\n{competition_info}\n    </competition_info>\n   <plan>\n{plan}\n    </plan>"
+        input_used_in_review = f"   <background_info>\n{background_info}\n    </background_info>\n   <plan>\n{plan}\n    </plan>"
         return {
             self.role: {
                 "history": history,

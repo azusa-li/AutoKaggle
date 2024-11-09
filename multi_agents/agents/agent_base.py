@@ -32,20 +32,21 @@ class Agent:
         self.role = role
         self.description = description
         self.llm = LLM(model, type)
-        logger.info(f'Agent {self.role} is created.')
+        self.model = model
+        logger.info(f'Agent {self.role} is created with model {model}.')
 
     def _gather_experience_with_suggestion(self, state: State) -> str:
         experience_with_suggestion = ""
         for i, each_state_memory in enumerate(state.memory[:-1]):
-            act_agent_memory = each_state_memory.get(self.role, {}) # 获取过去state中当前agent的memory
+            act_agent_memory = each_state_memory.get(self.role, {}) # get the memory of the current agent in the past state
             result = act_agent_memory.get("result", "")
-            reviewer_memory = each_state_memory.get("reviewer", {}) # 获取过去state中reviewer的memory
+            reviewer_memory = each_state_memory.get("reviewer", {}) # get the memory of the reviewer in the past state
             suggestion = reviewer_memory.get("suggestion", {}).get(f"agent {self.role}", "")
             score = reviewer_memory.get("score", {}).get(f"agent {self.role}", 3)
             experience_with_suggestion += PROMPT_EACH_EXPERIENCE_WITH_SUGGESTION.format(index=i, experience=result, suggestion=suggestion, score=score)
             if self.role == 'developer':
-                path_to_error = f'{state.competition_dir}/{state.dir_name}/{state.dir_name}_error.txt'
-                path_to_not_pass_info = f'{state.competition_dir}/{state.dir_name}/{state.dir_name}_not_pass_information.txt'
+                path_to_error = f'{state.restore_dir}/{state.dir_name}_error.txt'
+                path_to_not_pass_info = f'{state.restore_dir}/{state.dir_name}_not_pass_information.txt'
                 if os.path.exists(path_to_error):
                     with open(path_to_error, 'r') as f:
                         error_message = f.read()
@@ -59,7 +60,7 @@ class Agent:
     def _read_data(self, state: State, num_lines: int = 11) -> str:
         def read_sample(file_path: str, num_lines) -> str:
             """
-            读取文件的前 num_lines 行内容并返回为字符串。
+            read the first num_lines lines of a file and return as a string
             """
             sample_lines = []
             with open(file_path, 'r', encoding='utf-8') as f:
@@ -69,19 +70,11 @@ class Agent:
                     sample_lines.append(line)
             return "".join(sample_lines)
         
-        result = ""
+        submission_columns = pd.read_csv(f'{state.competition_dir}/sample_submission.csv').columns.tolist()
+        target_columns = submission_columns[1:]
+        result = f"\n#############\n# TARGET VARIABLE #\n{target_columns}"
         if state.phase in ["Understand Background", "Preliminary Exploratory Data Analysis", "Data Cleaning"]:
-            # train_data_sample = read_sample(f'{state.competition_dir}/train.csv', num_lines)
-            # 包含train的文件路径 过滤掉包含 'cleaned_train' 和 'processed_train' 的文件 选择第一个符合条件的
-            all_train_files = glob.glob(os.path.join(state.competition_dir, '*train*.csv'))
-            filtered_train_files = [f for f in all_train_files if 'cleaned_train' not in f and 'processed_train' not in f]
-            if filtered_train_files:
-                train_file_path = filtered_train_files[0]
-                train_data_sample = read_sample(train_file_path, num_lines)
-            else:
-                print("没有找到符合条件的文件")
-                exit()
-            train_data_sample = read_sample(train_file_path, num_lines)
+            train_data_sample = read_sample(f'{state.competition_dir}/train.csv', num_lines)
             test_data_sample = read_sample(f'{state.competition_dir}/test.csv', num_lines)
             result += f"\n#############\n# TRAIN DATA WITH FEATURES #\n{train_data_sample}\n#############\n# TEST DATA WITH FEATURES #\n{test_data_sample}"
         elif state.phase in ["In-depth Exploratory Data Analysis", "Feature Engineering"]:
@@ -91,10 +84,25 @@ class Agent:
         elif state.phase in ["Model Building, Validation, and Prediction"]:
             processed_train_data_sample = read_sample(f'{state.competition_dir}/processed_train.csv', num_lines)
             processed_test_data_sample = read_sample(f'{state.competition_dir}/processed_test.csv', num_lines)
-            result += f"\n#############\n# PROCESSED TRAIN DATA WITH FEATURES #\n{processed_train_data_sample}\n#############\n# PROCESSED TEST DATA WITH FEATURES #\n{processed_test_data_sample}"
-
+            submission_sample = read_sample(f'{state.competition_dir}/sample_submission.csv', num_lines)
+            result += f"\n#############\n# PROCESSED TRAIN DATA WITH FEATURES #\n{processed_train_data_sample}\n#############\n# PROCESSED TEST DATA WITH FEATURES #\n{processed_test_data_sample}\n#############\n# SUBMISSION FORMAT #\n{submission_sample}"
+            with open(f'{state.competition_dir}/competition_info.txt', 'r') as f:
+                competition_info = f.read()
+            prompt_extract_metric = f"# TASK #\nPlease extract the evaluation metric from the competition information: {competition_info}\n#############\n# RESPONSE: MARKDOWN FORMAT #\n```markdown\n# Evaluation Metric\n[evaluation metric for the competition]\n```"
+            raw_reply, _ = self.llm.generate(prompt_extract_metric, history=[], max_completion_tokens=4096)
+            metric = self._parse_markdown(raw_reply)
+            result += f"\n#############\n# EVALUATION METRIC #\n{metric}"
         return result
 
+    def _data_preview(self, state: State, num_lines: int) -> str:
+        data_used_in_preview = self._read_data(state, num_lines=num_lines)
+        input = PROMPT_DATA_PREVIEW.format(data=data_used_in_preview)
+        raw_reply, _ = self.llm.generate(input, [], max_completion_tokens=4096)
+        data_preview = self._parse_markdown(raw_reply)
+
+        with open(f'{state.restore_dir}/data_preview.txt', 'w') as f:
+            f.write(data_preview)
+        return data_preview
 
     def _parse_json(self, raw_reply: str) -> Dict[str, Any]:
         def try_json_loads(data: str) -> Dict[str, Any]:
@@ -106,7 +114,7 @@ class Agent:
 
         raw_reply = raw_reply.strip()
         logger.info(f"Attempting to extract JSON from raw reply.")
-        json_match = re.search(r'```json(.*)```', raw_reply, re.DOTALL) # 贪婪模式捕获
+        json_match = re.search(r'```json(.*)```', raw_reply, re.DOTALL) # greedy mode capture
         
         if json_match:
             reply_str = json_match.group(1).strip()
@@ -115,12 +123,10 @@ class Agent:
                 return reply
         
         logger.info(f"Failed to parse JSON from raw reply, attempting reorganization.")
-        if self.role == "planner":
-            json_reply, _ = self.llm.generate(REORGANIZE_REPLY_TYPE3.format(information=raw_reply), history=[], max_tokens=4096)
-        elif self.role == "reviewer":
-            json_reply, _ = self.llm.generate(REORGANIZE_REPLY_TYPE2.format(information=raw_reply), history=[], max_tokens=4096)
+        if self.role == 'developer':
+            json_reply, _ = self.llm.generate(PROMPT_REORGANIZE_EXTRACT_TOOLS.format(information=raw_reply), history=[], max_completion_tokens=4096)
         else:
-            json_reply, _ = self.llm.generate(REORGANIZE_REPLY_TYPE1.format(information=raw_reply), history=[], max_tokens=4096)
+            json_reply, _ = self.llm.generate(PROMPT_REORGANIZE_JSON.format(information=raw_reply), history=[], max_completion_tokens=4096)
         
         json_match = re.search(r'```json(.*?)```', json_reply, re.DOTALL)
         if json_match:
@@ -136,7 +142,7 @@ class Agent:
         return reply
     
     def _parse_markdown(self, raw_reply: str) -> str:
-        markdown_match = re.search(r'```markdown(.*)```', raw_reply, re.DOTALL) # 贪婪模式捕获
+        markdown_match = re.search(r'```markdown(.*)```', raw_reply, re.DOTALL)
         if markdown_match:
             reply_str = markdown_match.group(1).strip()
             return reply_str
@@ -195,11 +201,11 @@ class Agent:
 
         if self.role == 'developer' and state.phase in ['Data Cleaning', 'Feature Engineering', 'Model Building, Validation, and Prediction'] and len(all_tool_names) > 0:
             logger.info(f"Extracting tools' description for developer in phase: {state.phase}")
-            with open(f'{state.competition_dir}/{state.dir_name}/markdown_plan.txt', 'r') as file:
+            with open(f'{state.restore_dir}/markdown_plan.txt', 'r') as file:
                 markdown_plan = file.read()
             input = PROMPT_EXTRACT_TOOLS.format(document=markdown_plan, all_tool_names=all_tool_names)
-            raw_reply, _ = self.llm.generate(input, history=[], max_tokens=4096)
-            with open(f'{state.competition_dir}/{state.dir_name}/extract_tools_reply.txt', 'w') as file:
+            raw_reply, _ = self.llm.generate(input, history=[], max_completion_tokens=4096)
+            with open(f'{state.restore_dir}/extract_tools_reply.txt', 'w') as file:
                 file.write(raw_reply)
             tool_names = self._parse_json(raw_reply)['tool_names']
         else:
@@ -211,32 +217,12 @@ class Agent:
             tools.append(conclusion)
 
         if self.role == 'developer' and state.phase in ['Data Cleaning', 'Feature Engineering', 'Model Building, Validation, and Prediction']:  
-            with open(f'{state.competition_dir}/{state.dir_name}/tools_used_in_{state.dir_name}.md', 'w') as file:
+            with open(f'{state.restore_dir}/tools_used_in_{state.dir_name}.md', 'w') as file:
                 file.write(''.join(tools))
         
         tools = ''.join(tools) if len(tool_names) > 0 else "There is no pre-defined tools used in this phase."
         return tools, tool_names
 
-        # tools = ""
-        # tool_names = state.ml_tools
-        # path_to_tools_doc = f'{PREFIX_MULTI_AGENTS}/tools/ml_tools_doc/{state.dir_name}_tools.md'
-        # print(path_to_tools_doc)
-        # if len(tool_names) > 0:
-        #     if os.path.exists(path_to_tools_doc):
-        #         with open(path_to_tools_doc, 'r') as file:
-        #             tools = file.read()
-        #     else:
-        #         # Read the JSON file
-        #         with open('multi_agents/function_to_schema.json', 'r') as file:
-        #             schema_data = json.load(file)
-        #         print(schema_data)
-        #         for tool_name in tool_names:
-        #             tools += self._json_to_markdown(schema_data[tool_name])
-        #         with open(f'{PREFIX_MULTI_AGENTS}/tools/ml_tools_doc/{state.dir_name}_tools.md', 'w') as file:
-        #             file.write(tools)
-        # else:
-        #     tools = "There is no pre-defined tools used in this phase."
-        # return tools, tool_names
 
     def _get_feature_info(self, state: State) -> str:
         # Define file names for before and after the current phase
@@ -284,7 +270,6 @@ class Agent:
 
 
     def action(self, state: State) -> Dict[str, Any]:
-        # pdb.set_trace()
         logger.info(f"State {state.phase} - Agent {self.role} is executing.")
         role_prompt = AGENT_ROLE_TEMPLATE.format(agent_role=self.role)
         return self._execute(state, role_prompt)

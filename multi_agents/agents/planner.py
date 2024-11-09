@@ -49,20 +49,24 @@ class Planner(Agent):
         return previous_plan, previous_report
 
     def _execute(self, state: State, role_prompt: str) -> Dict[str, Any]:
-        # 实现规划功能
+        # implement the planning function
         history = []
-        round = 0
-        with open(f'{state.competition_dir}/competition_info.txt', 'r') as f:
-            competition_info = f.read()
+        data_preview = self._data_preview(state, num_lines=11)
+        background_info = f"Data preview:\n{data_preview}"
+        state.set_background_info(background_info)
         state_info = state.get_state_info()
-        if len(state.memory) == 1: # 如果之前没有memory，说明是第一次执行
-            history.append({"role": "system", "content": f"{role_prompt}{self.description}"})
+
+        if len(state.memory) == 1: # if there is no memory before, it means it is the first execution
+            if self.model == 'gpt-4o':
+                history.append({"role": "system", "content": f"{role_prompt}{self.description}"})
+            elif self.model == 'o1-mini':
+                history.append({"role": "user", "content": f"{role_prompt}{self.description}"})
             # Round 0
             task = PROMPT_PLANNER_TASK.format(phase_name=state.phase)
             user_rules = state.generate_rules()
             input = PROMPT_PLANNER.format(phases_in_context=state.context, phase_name=state.phase, state_info=state_info, 
-                                          user_rules=user_rules, competition_info=competition_info, task=task)
-            _, history = self.llm.generate(input, history, max_tokens=4096)
+                                          user_rules=user_rules, background_info=background_info, task=task)
+            _, history = self.llm.generate(input, history, max_completion_tokens=4096)
 
             # Round 1
             input = f"# PREVIOUS PLAN #\n{self._get_previous_plan_and_report(state)[0]}\n#############\n# PREVIOUS REPORT #\n{self._get_previous_plan_and_report(state)[1]}\n"
@@ -72,20 +76,20 @@ class Planner(Agent):
                 input += PROMPT_PLANNER_TOOLS.format(tools=tools, tool_names=tool_names)
             else:
                 input += "# AVAILABLE TOOLS #\nThere is no pre-defined tools in this phase. You can use the functions from public libraries such as Pandas, NumPy, Scikit-learn, etc.\n"
-            raw_plan_reply, history = self.llm.generate(input, history, max_tokens=4096)
+            raw_plan_reply, history = self.llm.generate(input, history, max_completion_tokens=4096)
             with open(f'{state.restore_dir}/raw_plan_reply.txt', 'w') as f:
                 f.write(raw_plan_reply)
 
             # Round 2
             input = PROMPT_PLNNAER_REORGANIZE_IN_MARKDOWN
-            organized_markdown_plan, history = self.llm.generate(input, history, max_tokens=4096)
+            organized_markdown_plan, history = self.llm.generate(input, history, max_completion_tokens=4096)
             markdown_plan = self._parse_markdown(organized_markdown_plan)
             with open(f'{state.restore_dir}/markdown_plan.txt', 'w') as f:
                 f.write(markdown_plan)
 
             # Round 3
             input = PROMPT_PLNNAER_REORGANIZE_IN_JSON
-            raw_json_plan, history = self.llm.generate(input, history, max_tokens=4096)
+            raw_json_plan, history = self.llm.generate(input, history, max_completion_tokens=4096)
             try:
                 json_plan = self._parse_json(raw_json_plan)['final_answer']
             except Exception as e:
@@ -96,16 +100,16 @@ class Planner(Agent):
 
         else:
             last_planner_score = state.memory[-2].get("reviewer", {}).get("score", {}).get("agent planner", 0)
-            if last_planner_score >= 3: # 如果上一轮中planner的评分大于等于3，说明上一个planner的规划结果是可以接受的
+            if last_planner_score >= 3: # if the score of the last planner is greater than or equal to 3, it means the planner's plan is acceptable
                 return {"planner": state.memory[-2]["planner"]}
             else:
                 return {"planner": state.memory[-2]["planner"]}
 
-        # 保存history
+        # save history
         with open(f'{state.restore_dir}/{self.role}_history.json', 'w') as f:
             json.dump(history, f, indent=4)
 
-        input_used_in_review = f"   <competition_info>\n{competition_info}\n    </competition_info>"
+        input_used_in_review = f"   <background_info>\n{background_info}\n    </background_info>"
 
         print(f"State {state.phase} - Agent {self.role} finishes working.")
 
@@ -134,7 +138,7 @@ class Planner(Agent):
             else:
                 print("Continuing with the current plan.")
 
-        # 保存plan和result
+        # save plan and result
         plan = markdown_plan
         result = markdown_plan
 

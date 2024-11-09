@@ -1,7 +1,7 @@
 PROMPT_PLANNER_TASK = '''
 Please design plan that is clear and specific to each FEATURE for the current development phase: {phase_name}. 
 The developer will execute tasks based on your plan. 
-I will provide you with COMPETITION INFORMATION, RESOURCE CONSTRAINTS, and previous reports and plans.
+I will provide you with INFORMATION, RESOURCE CONSTRAINTS, and previous reports and plans.
 You can use the following reasoning pattern to design the plan:
 1. Break down the task into smaller steps.
 2. For each step, ask yourself and answer:
@@ -33,11 +33,12 @@ PROMPT_PLANNER = '''
 # CONTEXT #
 {phases_in_context}
 Currently, I am at phase: {phase_name}.
-{state_info}
 
 #############
-# COMPETITION INFORMATION #
-{competition_info}
+# INFORMATION #
+{background_info}
+
+{state_info}
 
 #############
 # NOTE #
@@ -146,67 +147,3 @@ Here is the JSON format you should follow:
 #############
 # START REORGANIZING #
 '''
-
-# You can use the following template to guide your response:
-# Thought: you should always think about what to do to complete the task
-# Action: the action to take
-# Observation: the result of the action
-# ... (this Thought/Action/Action Input/Observation can repeat N times)
-# Final Thought: I now know the final answer
-# Final Answer: the final answer to the original input question
-
-
-# ```json
-# {{
-#     "thought_process": list=[
-#         {{
-#             "thought": str="Reflect on the current situation and consider how to proceed in fulfilling the user's requirements.",
-#             "action": str="Describe the action you plan to take to meet the user's needs.",
-#             "observation": str="Note the expected or actual results of the action."
-#         }}
-#     ],
-#     "final_thought": str="Summarize your understanding and confirm that you now have the final answer.",
-#     "final_answer": list=[
-#         {{
-#             "task": str="The specific task to be performed",
-#             "method": list=["Methods to be used"],
-#         }}
-#     ]
-# }}
-# ```
-
-# ## Thought Process ##
-# (This Thought/Action/Observation sequence may repeat as needed.)
-# - Thought: str="Reflect on the current situation and consider how to proceed in fulfilling the user's requirements."
-# - Action: str="Describe the action you plan to take to meet the user's needs."
-# - Observation: str="Note the expected or actual results of the action."
-# ## Final Thought ##
-# str="Summarize your understanding and confirm that you now have the final answer."
-# ## Final Answer ##
-# str="Provide the final answer to the original task."
-
-# Here is an example of planning for the preliminary EDA step:
-# [
-#     {{
-#         "task": "Understand the Structure of the Data",
-#         "method": [
-#             "Load the train.csv and test.csv datasets",
-#             "Display the first few rows of the datasets using head()",
-#             "Use info() to get a summary of the datasets, including the number of non-null entries and data types",
-#             "Use describe() to get basic statistical summaries of the numerical features"
-#         ]
-#     }},
-#     {{
-#         "task": "Identify and Visualize Missing Values",
-#         "method": [
-#             "Use isnull().sum() to count the number of missing values in each column"
-#         ]
-#     }},
-#     {{
-#         "task": "Detect Outliers and Analyze Relationships",
-#         "method": [
-#             "Use box plots to visualize the distribution of numerical features and identify outliers",
-#             "Use correlation matrices to identify the strength and direction of relationships between numerical features and SalePrice"
-#         ]
-#     }}
-# ]

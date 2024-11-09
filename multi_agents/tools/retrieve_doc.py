@@ -42,7 +42,6 @@ class RetrieveTool:
     def query_sklearn(self, query: str):
         results = self.db.search_context(query)
         path = results['metadatas'][0][0]['doc name']
-        # print(path)
         details = []
         for i in results['metadatas'][0]:
             path = i['doc name']
@@ -76,7 +75,6 @@ text: {content}
                 if os.path.isfile(file_path) and file.endswith(doc_type):
                     md_path.append(file_path)
 
-        # print(md_path)
         # Read the HTML files
         num_data = self.db.check_collection_none()
         if num_data == 0:
@@ -90,23 +88,3 @@ text: {content}
         label = state_name + '_tools.md'
         results = self.db.search_context_with_metadatas(query, label)
         return results['documents'][0][0]
-
-
-            
-
-
-def main():
-    # print(load_api_config())
-    embeddings = OpenaiEmbeddings(api_key='')
-    llm = LLM('gpt-4o', 'api')
-
-    tool = RetrieveTool(llm, embeddings)
-    # tool.create_db_tools()
-    conclusion = tool.query_tools('Use the fill_missing_values tool.')
-    print(conclusion)
-
-
-
-if __name__ == '__main__':
-    main()
-        

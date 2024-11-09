@@ -33,8 +33,6 @@ def split_tools(text: str):
     # Split the text into chunks
     chunks = re.split(r'---', text)
     return chunks
-    
-
 
 class Memory:
     def __init__(self, client: Client, collection_name: str, embedding_model: OpenaiEmbeddings):

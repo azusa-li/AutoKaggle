@@ -36,12 +36,12 @@ Let's work this out in a step by step way.
 
 #############
 # START ANALYSIS #
-If you understand, please request the overview of this data science competition, features and 20 samples in train set and test set from me.
+If you understand, please request the overview of this data science competition, and data preview from me.
 '''
 
 PROMPT_READER_ROUND2 = '''
 # TASK #
-Please extract essential information from your answer and reorganize into a specified JSON format. 
+Please extract essential information from your answer and reorganize into a specified MARKDOWN format. 
 You need to organize the information in a clear and concise manner, ensuring that the content is logically structured and easy to understand. 
 You must ensure that the essential information is complete and accurate.
 

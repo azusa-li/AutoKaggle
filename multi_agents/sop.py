@@ -12,8 +12,9 @@ from agents import Reader, Planner, Developer, Reviewer, Summarizer
 from state import State
 
 class SOP:
-    def __init__(self, competition: str):
+    def __init__(self, competition: str, model: str):
         self.competition = competition
+        self.model = model.replace("_", "-")
         self.state_records = []
         self.current_state = None
         self.config = self._load_configuration()
@@ -30,7 +31,7 @@ class SOP:
         if agent_name == "Reader":
             agent = Reader('gpt-4o-mini', 'api')
         elif agent_name == "Planner":
-            agent = Planner('gpt-4o', 'api')
+            agent = Planner(self.model, 'api')
         elif agent_name == "Developer":
             agent = Developer('gpt-4o', 'api')
         elif agent_name == "Reviewer":
@@ -41,16 +42,13 @@ class SOP:
             return None
         return agent
 
-    # 执行完当前state，并返回新的state
     def step(self, state: State) -> Tuple[str, State]:
         logging.info(f"Current State: {state}")
         state.make_dir()
         state.make_context()
         
         while not state.finished:
-            # import pdb; pdb.set_trace()
             current_agent_name = state.get_current_agent()
-            # print(f"Current Agent: {current_agent_name}")
             current_agent = self._create_agent(current_agent_name)
             
             if current_agent is None:
@@ -62,11 +60,11 @@ class SOP:
 
             if state.check_finished():
                 state.set_score()
-                state_info, new_state = self.update_state(state)
-                if state_info == 'Success':
+                exec_state_info, new_state = self.update_state(state)
+                if exec_state_info == 'Success':
                     state.restore_memory()
         
-        return state_info, new_state
+        return exec_state_info, new_state
 
     def update_state(self, state: State) -> Tuple[str, Optional[State]]:
         self.state_records.append(copy.deepcopy(state))

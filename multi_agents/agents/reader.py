@@ -32,25 +32,24 @@ class Reader(Agent):
         overview = read_file(path_to_overview)
         history = []
         round = 0
-        # Understand Background 读取overview.txt，生成competition_info.txt
-        if len(state.memory) == 1: # 如果之前没有memory，说明是第一次执行
+        # Understand Background read the overview.txt, generate competition_info.txt
+        if len(state.memory) == 1: # if there is no memory before, it means it is the first execution
             history.append({"role": "system", "content": f"{role_prompt}{self.description}"})
-            # pdb.set_trace()
             while True:
                 if round == 0:
                     task = PROMPT_READER_TASK
                     input = PROMPT_READER.format(phases_in_context=state.context, task=task)
                 elif round == 1: 
                     input = f"\n#############\n# OVERVIEW #\n{overview}"
-                    input += self._read_data(state, num_lines=1)
+                    input += self._data_preview(state, num_lines=11)
                 elif round == 2: 
                     reader_mid_reply = raw_reply
                     input = PROMPT_READER_ROUND2
                 elif round == 3: 
                     break
-                raw_reply, history = self.llm.generate(input, history, max_tokens=4096)
+                raw_reply, history = self.llm.generate(input, history, max_completion_tokens=4096)
                 round += 1
-        else: # 如果之前有memory，拼接之前memory中reader的结果作为experience
+        else: # if there is memory before, concatenate the results of the reader in the previous memory as experience
             self.description = "You are good at reading document and summarizing information." \
                             "You have advanced reasoning abilities and can improve your answers through reflection."
             experience_with_suggestion = self._gather_experience_with_suggestion(state)
@@ -61,20 +60,20 @@ class Reader(Agent):
                     input = PROMPT_READER_WITH_EXPERIENCE_ROUND0.format(phases_in_context=state.context, task=task, experience_with_suggestion=experience_with_suggestion)
                 elif round == 1: 
                     input = f"# OVERVIEW #\n{overview}\n############# "
-                    input += self._read_data(state, num_lines=1)
+                    input += self._data_preview(state, num_lines=11)
                 elif round == 2:
                     reader_mid_reply = raw_reply
                     input = PROMPT_READER_WITH_EXPERIENCE_ROUND2
                 elif round == 3: 
                     break
-                raw_reply, history = self.llm.generate(input, history, max_tokens=4096)
+                raw_reply, history = self.llm.generate(input, history, max_completion_tokens=4096)
                 round += 1
         result = raw_reply
         reply = self._parse_markdown(raw_reply)
 
         summary = reply 
 
-        # 保存history
+        # save history
         with open(f'{state.restore_dir}/{self.role}_history.json', 'w') as f:
             json.dump(history, f, indent=4)
         with open(f'{state.competition_dir}/competition_info.txt', 'w') as f:

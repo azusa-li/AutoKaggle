@@ -33,6 +33,7 @@ class State:
         self.dir_name = self.phase_to_directory[self.phase]
         self.restore_dir = f'{self.competition_dir}/{self.dir_name}'
         self.ml_tools = self.phase_to_ml_tools[self.phase]
+        self.background_info = ""
         self.context = ""
 
     def __str__(self) -> str:
@@ -44,12 +45,45 @@ class State:
         self.context += "\n".join(f"{i+1}. {phase}" for i, phase in enumerate(phases))
 
     def get_state_info(self) -> str:
-        if self.phase == 'Data Cleaning':
-            return "In Data Cleaning, you already have file `train.csv' and `test.csv`. In this phase, the overall goal is to do data cleaning to them to get `cleaned_train.csv` and `cleaned_test.csv`"
+        if self.phase == 'Preliminary Exploratory Data Analysis':
+            return ("In this phase, you have `train.csv` and `test.csv`. Your goals are:\n"
+                    "1. Perform initial data exploration on both datasets.\n"
+                    "2. Identify basic statistics, data types, and distributions.\n"
+                    "3. Detect potential issues like missing values, outliers, or inconsistencies.\n"
+                    "4. Provide insights to guide the subsequent Data Cleaning phase.\n")
+
+        elif self.phase == 'Data Cleaning':
+            return ("In this phase, you have `train.csv` and `test.csv`. Your goals are:\n"
+                    "1. Address issues identified in the Preliminary EDA phase.\n"
+                    "2. Handle missing values using appropriate techniques.\n"
+                    "3. Treat outliers and anomalies.\n"
+                    "4. Ensure consistency across both datasets.\n"
+                    "5. Other necessary data cleaning steps.\n"
+                    "6. Create `cleaned_train.csv` and `cleaned_test.csv`.\n"
+                    "Output: Cleaned datasets (cleaned_train.csv and cleaned_test.csv).")
+
+        elif self.phase == 'In-depth Exploratory Data Analysis':
+            return ("In this phase, you have `cleaned_train.csv` and `cleaned_test.csv`. Your goals are:\n"
+                    "1. Conduct thorough statistical analysis on the cleaned data.\n"
+                    "2. Explore relationships between features and the target variable.\n"
+                    "3. Identify potential feature interactions.\n"
+                    "4. Visualize key insights and patterns.\n"
+                    "5. Provide recommendations for Feature Engineering.\n")
+
         elif self.phase == 'Feature Engineering':
-            return "After Data Cleaning, you already have file `cleaned_train.csv' and `cleaned_test.csv`. In this phase, the overall goal is to do feature engineering to them to get `processed_train.csv` and `processed_test.csv`"
+            return ("In this phase, you have `cleaned_train.csv` and `cleaned_test.csv`. Your goals are:\n"
+                    "1. Create new features based on insights from the In-depth EDA.\n"
+                    "2. Transform existing features to improve model performance.\n"
+                    "3. Handle categorical variables (e.g., encoding).\n"
+                    "4. Normalize or standardize numerical features if necessary.\n"
+                    "5. Select the most relevant features for modeling if necessary.\n"
+                    "6. Other necessary feature engineering steps.\n"
+                    "7. Create `processed_train.csv` and `processed_test.csv`.\n"
+                    "Output: Processed datasets (processed_train.csv and processed_test.csv).")
+
         elif self.phase == 'Model Building, Validation, and Prediction':
             return ("In this phase, you have `processed_train.csv` and `processed_test.csv`. "
+                    "You should first train a model on the training set and then make predictions on the test set.\n"
                     "Before training the model:\n"
                     "1. For the training set, separate the target column as y.\n"
                     "2. Remove the target column and any non-numeric columns (e.g., String-type columns) that cannot be used in model training from the training set.\n"
@@ -58,6 +92,9 @@ class State:
                     "2. Ensure consistency between the columns used in training and prediction.\n"
                     "Due to computational resource limitations, you are allowed to train a maximum of **three** models")
         return ""
+    
+    def set_background_info(self, background_info: str) -> None:
+        self.background_info = background_info
 
     def get_current_agent(self) -> str:
         return self.agents[self.current_step % len(self.agents)]
@@ -83,7 +120,6 @@ class State:
             formatted_rules.append("")
         return "\n".join(formatted_rules)
 
-    # 创建当前State的目录
     def make_dir(self) -> None:
         path_to_dir = f'{self.competition_dir}/{self.dir_name}'
         os.makedirs(path_to_dir, exist_ok=True)
@@ -140,7 +176,10 @@ class State:
 
     def set_score(self) -> None:
         final_score = self.memory[-1]['reviewer']['score']
-        self.score = sum(float(score) for score in final_score.values())/len(final_score)
+        if final_score.get('agent developer', 3) == 0:
+            self.score = 0
+        else:
+            self.score = sum(float(score) for score in final_score.values())/len(final_score)
 
     def check_finished(self) -> bool:
         self.finished = self.current_step == len(self.agents)

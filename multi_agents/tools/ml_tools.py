@@ -259,16 +259,17 @@ def format_datetime(data: pd.DataFrame, columns: Union[str, List[str]], format: 
 
 def one_hot_encode(data: pd.DataFrame, 
                    columns: Union[str, List[str]], 
-                   drop_original: bool = True, 
+                   drop_original: bool = False, 
                    handle_unknown: str = 'error') -> pd.DataFrame:
     """
-    Perform one-hot encoding on specified categorical columns.
+    Perform one-hot encoding on specified categorical columns. The resulting columns 
+    will follow the format 'original_column_value'.
 
     Args:
         data (pd.DataFrame): The input DataFrame.
         columns (str or List[str]): Column label or list of column labels to encode.
-        drop_original (bool, optional): Whether to drop the original columns. Defaults to True.
         handle_unknown (str, optional): How to handle unknown categories. Options are 'error' or 'ignore'. Defaults to 'error'.
+        drop_original (bool, optional): If True, drop original columns. Defaults to False.
 
     Returns:
         pd.DataFrame: DataFrame with one-hot encoded columns.
@@ -280,11 +281,6 @@ def one_hot_encode(data: pd.DataFrame,
         0           0            0          1
         1           1            0          0
         2           0            1          0
-        3           0            0          1
-
-    Raises:
-        ValueError: If specified columns are not found in the DataFrame, if duplicate columns are not identical,
-                    or if unknown categories are encountered (when handle_unknown='error').
     """
     if isinstance(columns, str):
         columns = [columns]
@@ -294,34 +290,12 @@ def one_hot_encode(data: pd.DataFrame,
     if missing_columns:
         raise ValueError(f"Columns {missing_columns} not found in the DataFrame.")
 
-    # Handle duplicate columns
-    unique_columns = []
-    for col in columns:
-        if col in unique_columns:
-            continue
-        col_data = data[col]
-        if isinstance(col_data, pd.DataFrame):
-            # Check if all duplicate columns are identical
-            if col_data.nunique().eq(1).all():
-                print(f"Warning: Duplicate identical columns found for '{col}'. Only one instance will be encoded.")
-                unique_columns.append(col)
-            else:
-                raise ValueError(f"Duplicate non-identical columns found for '{col}'. Please resolve this before encoding.")
-        else:
-            unique_columns.append(col)
-
-    # Check data types and warn for non-categorical columns
-    for col in unique_columns:
-        col_data = data[col]
-        if not pd.api.types.is_categorical_dtype(col_data) and not pd.api.types.is_object_dtype(col_data):
-            warnings.warn(f"Column '{col}' is {col_data.dtype}, which is not categorical. One-hot encoding may not be appropriate.")
-
     # Perform one-hot encoding
     encoder = OneHotEncoder(sparse_output=False, handle_unknown=handle_unknown)
-    encoded = encoder.fit_transform(data[unique_columns])
+    encoded = encoder.fit_transform(data[columns])
     
-    # Create new column names
-    new_columns = [f"{col}_{val}" for col, vals in zip(unique_columns, encoder.categories_) for val in vals]
+    # Create new column names in the format 'original_column_value'
+    new_columns = [f"{col}_{val}" for col, vals in zip(columns, encoder.categories_) for val in vals]
     
     # Create a new DataFrame with encoded values
     encoded_df = pd.DataFrame(encoded, columns=new_columns, index=data.index)
@@ -331,35 +305,32 @@ def one_hot_encode(data: pd.DataFrame,
     
     # Drop original columns if specified
     if drop_original:
-        result = result.drop(unique_columns, axis=1)
+        result = result.drop(columns, axis=1)
     
     return result
 
+
 def label_encode(data: pd.DataFrame, 
-                 columns: Union[str, List[str]], 
-                 drop_original: bool = True) -> pd.DataFrame:
+                 columns: Union[str, List[str]]) -> pd.DataFrame:
     """
-    Perform label encoding on specified categorical columns.
+    Perform label encoding on specified categorical columns. The resulting columns 
+    will follow the format 'original_column_encoded'.
 
     Args:
         data (pd.DataFrame): The input DataFrame.
         columns (str or List[str]): Column label or list of column labels to encode.
-        drop_original (bool, optional): Whether to drop the original columns. Defaults to True.
 
     Returns:
-        pd.DataFrame: DataFrame with label encoded columns
-
-    Raises:
-        ValueError: If specified columns are not found in the DataFrame or if duplicate columns are not identical.
+        pd.DataFrame: DataFrame with label encoded columns.
 
     Example:
         >>> df = pd.DataFrame({'fruit': ['apple', 'banana', 'apple', 'cherry']})
         >>> label_encode(df, 'fruit')
-           fruit_encoded
-        0              0
-        1              1
-        2              0
-        3              2
+           fruit  fruit_encoded
+        0  apple              0
+        1  banana             1
+        2  apple              0
+        3  cherry             2
     """
     if isinstance(columns, str):
         columns = [columns]
@@ -371,62 +342,43 @@ def label_encode(data: pd.DataFrame,
     if missing_columns:
         raise ValueError(f"Columns {missing_columns} not found in the DataFrame.")
 
-    # Handle duplicate columns
-    unique_columns = []
     for col in columns:
-        if col in unique_columns:
-            continue
         col_data = data[col]
-        if isinstance(col_data, pd.DataFrame):
-            # Check if all duplicate columns are identical
-            if col_data.nunique().eq(1).all():
-                print(f"Warning: Duplicate identical columns found for '{col}'. Only one instance will be encoded.")
-                unique_columns.append(col)
-            else:
-                raise ValueError(f"Duplicate non-identical columns found for '{col}'. Please resolve this before encoding.")
+
+        # Only encode columns of type 'category' or 'object'
+        if pd.api.types.is_categorical_dtype(col_data) or pd.api.types.is_object_dtype(col_data):
+            encoder = LabelEncoder()
+            encoded_col_name = f"{col}_encoded"
+            result[encoded_col_name] = encoder.fit_transform(col_data.astype(str))
         else:
-            unique_columns.append(col)
-
-    for col in unique_columns:
-        col_data = data[col]
-        if not pd.api.types.is_categorical_dtype(col_data) and not pd.api.types.is_object_dtype(col_data):
-            warnings.warn(f"Column '{col}' is {col_data.dtype}, which is not categorical. Label encoding may not be appropriate.")
-
-        encoder = LabelEncoder()
-        result[f"{col}_encoded"] = encoder.fit_transform(col_data.astype(str))
-
-        if drop_original:
-            result = result.drop(col, axis=1)
+            warnings.warn(f"Column '{col}' is {col_data.dtype}, which is not categorical. Skipping encoding.")
 
     return result
 
+
 def frequency_encode(data: pd.DataFrame, 
                      columns: Union[str, List[str]], 
-                     drop_original: bool = True) -> pd.DataFrame:
+                     drop_original: bool = False) -> pd.DataFrame:
     """
-    Perform frequency encoding on specified categorical columns.
+    Perform frequency encoding on specified categorical columns. The resulting columns 
+    will follow the format 'original_column_freq'.
 
     Args:
         data (pd.DataFrame): The input DataFrame.
         columns (str or List[str]): Column label or list of column labels to encode.
-        drop_original (bool, optional): Whether to drop the original columns. Defaults to True.
+        drop_original (bool, optional): If True, drop original columns. Defaults to False.
 
     Returns:
-        pd.DataFrame: DataFrame with frequency encoded columns
-
-    Raises:
-        ValueError: If specified columns are not found in the DataFrame or if duplicate columns are not identical.
+        pd.DataFrame: DataFrame with frequency encoded columns.
 
     Example:
-        >>> df = pd.DataFrame({'city': ['New York', 'London', 'Paris', 'New York', 'London', 'New York']})
-        >>> frequency_encode(df, 'city')
-           city_freq
-        0       0.50
-        1       0.33
-        2       0.17
-        3       0.50
-        4       0.33
-        5       0.50
+        >>> df = pd.DataFrame({'fruit': ['apple', 'banana', 'apple', 'cherry']})
+        >>> frequency_encode(df, 'fruit')
+           fruit  fruit_freq
+        0  apple        0.50
+        1  banana       0.25
+        2  apple        0.50
+        3  cherry       0.25
     """
     if isinstance(columns, str):
         columns = [columns]
@@ -438,75 +390,66 @@ def frequency_encode(data: pd.DataFrame,
     if missing_columns:
         raise ValueError(f"Columns {missing_columns} not found in the DataFrame.")
 
-    # Handle duplicate columns
-    unique_columns = []
     for col in columns:
-        if col in unique_columns:
-            continue
         col_data = data[col]
-        if isinstance(col_data, pd.DataFrame):
-            # Check if all duplicate columns are identical
-            if col_data.nunique().eq(1).all():
-                print(f"Warning: Duplicate identical columns found for '{col}'. Only one instance will be encoded.")
-                unique_columns.append(col)
-            else:
-                raise ValueError(f"Duplicate non-identical columns found for '{col}'. Please resolve this before encoding.")
-        else:
-            unique_columns.append(col)
-
-    for col in unique_columns:
-        col_data = data[col]
-        if not pd.api.types.is_categorical_dtype(col_data) and not pd.api.types.is_object_dtype(col_data):
-            warnings.warn(f"Column '{col}' is {col_data.dtype}, which is not categorical. Frequency encoding may not be appropriate.")
-
         frequency = col_data.value_counts(normalize=True)
-        result[f"{col}_freq"] = col_data.map(frequency)
-
-        if drop_original:
-            result = result.drop(col, axis=1)
+        encoded_col_name = f"{col}_freq"
+        result[encoded_col_name] = col_data.map(frequency)
 
     return result
+
+from scipy.special import expit
 
 def target_encode(data: pd.DataFrame, 
                   columns: Union[str, List[str]], 
                   target: str, 
-                  drop_original: bool = True, 
                   min_samples_leaf: int = 1, 
                   smoothing: float = 1.0) -> pd.DataFrame:
     """
-    Perform target encoding on specified categorical columns.
+    Perform target encoding on specified categorical columns. The resulting columns 
+    will follow the format 'original_column_target_enc'.
 
     Args:
         data (pd.DataFrame): The input DataFrame.
         columns (str or List[str]): Column label or list of column labels to encode.
         target (str): The name of the target column.
-        drop_original (bool, optional): Whether to drop the original columns. Defaults to True.
         min_samples_leaf (int, optional): Minimum samples to take category average into account. Defaults to 1.
         smoothing (float, optional): Smoothing effect to balance categorical average vs prior. Defaults to 1.0.
 
     Returns:
-        pd.DataFrame: DataFrame with target encoded columns
-
-    Raises:
-        ValueError: If specified columns are not found in the DataFrame, if the target column is not found,
-                    or if duplicate columns are not identical.
+        pd.DataFrame: DataFrame with target encoded columns.
 
     Example:
-        >>> df = pd.DataFrame({'category': ['A', 'B', 'A', 'C', 'B', 'A'], 'target': [1, 0, 1, 1, 0, 0]})
-        >>> target_encode(df, 'category', 'target')
-           category_target_enc
-        0              0.5000
-        1              0.0000
-        2              0.5000
-        3              1.0000
-        4              0.0000
-        5              0.5000
+        >>> df = pd.DataFrame({
+    'fruit': ['apple', 'banana', 'apple', 'cherry', 'banana', 'apple', 'cherry', 'banana', 'apple', 'cherry', 'kiwi'],
+    'region': ['north', 'north', 'south', 'south', 'north', 'south', 'north', 'south', 'north', 'north', 'south'],
+    'price': [1, 0, 1, 0, 2, 3, 1, 0, 1, 2, 3]
+})
+        >>> target_encode(data, ['fruit', 'region'], 'price', min_samples_leaf=2, smoothing=2.0)
+            fruit  region  price  fruit_price_enc  region_price_enc
+        0    apple   north      1          1.437566           1.509699
+        1   banana   north      0          0.912568           1.509699
+        2    apple   south      1          1.437566           1.250000
+        3   cherry   south      0          0.796902           1.250000
+        4   banana   north      2          0.912568           1.509699
+        5    apple   south      3          1.437566           1.250000
+        6   cherry   north      1          0.796902           1.509699
+        7   banana   south      0          0.912568           1.250000
+        8    apple   north      1          1.437566           1.509699
+        9   cherry   north      2          0.796902           1.509699
+        10    kiwi   south      3          1.750000           1.250000
     """
     if isinstance(columns, str):
         columns = [columns]
 
     if target not in data.columns:
         raise ValueError(f"Target column '{target}' not found in the DataFrame.")
+
+    if min_samples_leaf < 0:
+        raise ValueError(f"min_samples_leaf should be non-negative, but got {min_samples_leaf}.")
+    
+    if smoothing <= 0:
+        raise ValueError(f"smoothing should be positive, but got {smoothing}.")
 
     result = data.copy()
     prior = data[target].mean()
@@ -516,34 +459,19 @@ def target_encode(data: pd.DataFrame,
     if missing_columns:
         raise ValueError(f"Columns {missing_columns} not found in the DataFrame.")
 
-    # Handle duplicate columns
-    unique_columns = []
     for col in columns:
-        if col in unique_columns:
-            continue
         col_data = data[col]
-        if isinstance(col_data, pd.DataFrame):
-            # Check if all duplicate columns are identical
-            if col_data.nunique().eq(1).all():
-                print(f"Warning: Duplicate identical columns found for '{col}'. Only one instance will be encoded.")
-                unique_columns.append(col)
-            else:
-                raise ValueError(f"Duplicate non-identical columns found for '{col}'. Please resolve this before encoding.")
-        else:
-            unique_columns.append(col)
-
-    for col in unique_columns:
-        col_data = data[col]
-        if not pd.api.types.is_categorical_dtype(col_data) and not pd.api.types.is_object_dtype(col_data):
-            warnings.warn(f"Column '{col}' is {col_data.dtype}, which is not categorical. Target encoding may not be appropriate.")
-
         averages = data.groupby(col)[target].agg(["count", "mean"])
-        smoothing = 1 / (1 + np.exp(-(averages["count"] - min_samples_leaf) / smoothing))
-        averages["smooth"] = prior * (1 - smoothing) + averages["mean"] * smoothing
-        result[f"{col}_target_enc"] = col_data.map(averages["smooth"])
-
-        if drop_original:
-            result = result.drop(col, axis=1)
+        
+        # Calculate the smoothing factor using a sigmoid function
+        smoothing_factor = expit((averages["count"] - min_samples_leaf) / smoothing)
+        
+        # Calculate the smoothed averages
+        averages["smooth"] = prior * (1 - smoothing_factor) + averages["mean"] * smoothing_factor
+        
+        # Map the smooth values back to the original data
+        encoded_col_name = f"{col}_target_enc"
+        result[encoded_col_name] = col_data.map(averages["smooth"]).fillna(prior)  # Fill new categories with global prior
 
     return result
 
@@ -982,329 +910,6 @@ def create_feature_combinations(data: pd.DataFrame,
                       "This may lead to computational issues and overfitting.")
 
     return result
-
-
-def model_choice(model_name: str):
-    """
-    Choose a machine learning model based on the input model name.
-    
-    Args:
-        model_name (str): The name of the model to choose.
-                          Options: 'linear regression', 'logistic regression', 'decision tree', 
-                          'random forest', 'XGBoost', 'SVM', 'neural network'.
-    
-    Returns:
-        Model: The corresponding model instance.
-    
-    Raises:
-        ValueError: If the model_name is not recognized.
-    """
-    from sklearn.linear_model import LinearRegression, LogisticRegression
-    from sklearn.tree import DecisionTreeClassifier
-    from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-    from sklearn.svm import SVC
-    from sklearn.neural_network import MLPClassifier
-    models = {
-        'linear regression': LinearRegression(),
-        'logistic regression': LogisticRegression(),
-        'decision tree': DecisionTreeClassifier(),
-        'random forest': RandomForestClassifier(),
-        'XGBoost': GradientBoostingClassifier(),
-        'SVM': SVC(),
-        'neural network': MLPClassifier()
-    }
-
-    if model_name not in models:
-        raise ValueError(f"Model '{model_name}' is not in the available model list. Please choose from: {list(models.keys())}")
-
-    return models[model_name]
-
-
-
-from sklearn.model_selection import cross_val_score, GridSearchCV, RandomizedSearchCV
-
-def model_train(train_tool: str):
-    """
-    Choose a model training tool based on the input training tool name.
-    
-    Args:
-        train_tool (str): The name of the model training tool.
-                          Options: 'cross validation', 'grid search', 'random search'.
-    
-    Returns:
-        str: The corresponding training tool name.
-    
-    Raises:
-        ValueError: If the train_tool is not recognized.
-    """
-    training_tools = {
-        'cross validation': cross_val_score,
-        'grid search': GridSearchCV,
-        'random search': RandomizedSearchCV
-    }
-
-    if train_tool not in training_tools:
-        raise ValueError(f"Training tool '{train_tool}' is not supported. Please choose from: {list(training_tools.keys())}")
-
-    return training_tools[train_tool]
-
-
-def model_evaluation(evaluation_tool: str):
-    """
-    Choose a model evaluation tool based on the input evaluation tool name.
-    
-    Args:
-        evaluation_tool (str): The name of the evaluation tool.
-                               Options for classification: 'accuracy', 'precision', 'recall', 
-                               'F1 score', 'ROC AUC'.
-                               Options for regression: 'MSE', 'RMSE', 'MAE', 'R²'.
-    
-    Returns:
-        function: The corresponding evaluation function.
-    
-    Raises:
-        ValueError: If the evaluation_tool is not recognized.
-    """
-    from sklearn.metrics import (accuracy_score, precision_score, recall_score, f1_score, roc_auc_score,
-                                mean_squared_error, mean_absolute_error, r2_score)
-    evaluation_tools = {
-        # Classification metrics
-        'accuracy': accuracy_score,
-        'precision': precision_score,
-        'recall': recall_score,
-        'F1 score': f1_score,
-        'ROC AUC': roc_auc_score,
-        
-        # Regression metrics
-        'MSE': mean_squared_error,
-        'RMSE': lambda y_true, y_pred: mean_squared_error(y_true, y_pred, squared=False),  # Root Mean Squared Error
-        'MAE': mean_absolute_error,
-        'R²': r2_score
-    }
-
-    if evaluation_tool not in evaluation_tools:
-        raise ValueError(f"Evaluation tool '{evaluation_tool}' is not supported. Please choose from: {list(evaluation_tools.keys())}")
-
-    return evaluation_tools[evaluation_tool]
-
-
-
-
-from sklearn.inspection import PartialDependenceDisplay
-import shap
-import warnings
-
-def model_explanation(explanation_tool: str):
-    """
-    Choose a model explanation tool based on the input tool name.
-    
-    Args:
-        explanation_tool (str): The name of the explanation tool.
-                               Options: 'feature importance', 'SHAP', 'partial dependence'.
-    
-    Returns:
-        function: The corresponding explanation tool.
-    
-    Raises:
-        ValueError: If the explanation_tool is not recognized.
-    """
-    def feature_importance(model):
-        if hasattr(model, 'feature_importances_'):
-            return model.feature_importances_
-        else:
-            raise ValueError("Model does not have `feature_importances_` attribute.")
-
-    explanation_tools = {
-        'feature importance': feature_importance,
-        'SHAP': shap.Explainer,
-        'partial dependence': PartialDependenceDisplay.from_estimator
-    }
-
-    if explanation_tool not in explanation_tools:
-        raise ValueError(f"Explanation tool '{explanation_tool}' is not supported. Please choose from: {list(explanation_tools.keys())}")
-
-    return explanation_tools[explanation_tool]
-
-
-
-import joblib
-import pickle
-
-def model_persistence(tool_name: str):
-    """
-    Choose a model persistence tool for saving and loading models.
-
-    Args:
-        tool_name (str): The name of the persistence tool.
-                         Options: 'joblib', 'pickle'.
-    
-    Returns:
-        dict: A dictionary with 'save' and 'load' functions for the chosen tool.
-    
-    Raises:
-        ValueError: If the tool_name is not recognized.
-    """
-    persistence_tools = {
-        'joblib': {
-            'save': joblib.dump,
-            'load': joblib.load
-        },
-        'pickle': {
-            'save': lambda model, file_name: pickle.dump(model, open(file_name, 'wb')),
-            'load': lambda file_name: pickle.load(open(file_name, 'rb'))
-        }
-    }
-
-    if tool_name not in persistence_tools:
-        raise ValueError(f"Persistence tool '{tool_name}' is not supported. Please choose from: {list(persistence_tools.keys())}")
-    
-    return persistence_tools[tool_name]
-
-def prediction_tool(tool_name: str, model, X):
-    """
-    Choose a prediction tool for single or batch predictions.
-
-    Args:
-        tool_name (str): The name of the prediction tool.
-                         Options: 'single prediction', 'batch prediction'.
-        model: The trained model to use for predictions.
-        X: The input data for prediction, either a single sample or batch of samples.
-
-    Returns:
-        np.ndarray: The predictions made by the model.
-
-    Raises:
-        ValueError: If the tool_name is not recognized.
-    """
-    prediction_tools = {
-        'single prediction': lambda model, X: model.predict([X]),
-        'batch prediction': lambda model, X: model.predict(X)
-    }
-
-    if tool_name not in prediction_tools:
-        raise ValueError(f"Prediction tool '{tool_name}' is not supported. Please choose from: {list(prediction_tools.keys())}")
-
-    return prediction_tools[tool_name](model, X)
-
-def best_model_selection_tool(tool_name: str, model_paths: list, persistence_tool: str, X_test, y_test, evaluation_tool: str):
-    """
-    Choose the best model based on a specific evaluation metric.
-    
-    Args:
-        tool_name (str): The name of the model selection tool.
-                         Options: 'classification', 'regression'.
-        model_paths (list): A list of file paths to the trained models.
-        persistence_tool (str): The model persistence tool. Options: 'joblib', 'pickle'.
-        X_test: The test input data.
-        y_test: The test target labels.
-        evaluation_tool (str): The name of the evaluation metric to use.
-    
-    Returns:
-        tuple: The best model and its evaluation score.
-    
-    Raises:
-        ValueError: If the tool_name is not recognized.
-    """
-    # Get the evaluation function based on the tool_name
-    eval_fn = model_evaluation(evaluation_tool)
-    
-    # Get the save/load functions using the model persistence tool
-    persistence = model_persistence(persistence_tool)
-    
-    best_model = None
-    best_score = None
-    
-    for model_path in model_paths:
-        # Load the model from the file path using the selected persistence tool
-        model = persistence['load'](model_path)
-        
-        # Make predictions based on the tool_name
-        if tool_name == 'classification':
-            y_pred = model.predict(X_test)
-        elif tool_name == 'regression':
-            y_pred = model.predict(X_test)
-        else:
-            raise ValueError(f"Model selection tool '{tool_name}' is not supported. Please choose either 'classification' or 'regression'.")
-        
-        # Calculate the evaluation score
-        score = eval_fn(y_test, y_pred)
-        
-        # Track the best model and score
-        if best_score is None or score > best_score:
-            best_model = model
-            best_score = score
-    
-    return best_model, best_score
-
-
-from sklearn.ensemble import BaggingClassifier, RandomForestClassifier, GradientBoostingClassifier, StackingClassifier
-
-def ensemble_model_tool(tool_name: str, base_estimator=None, estimators=None):
-    """
-    Choose an ensemble learning tool based on the input tool name.
-
-    Args:
-        tool_name (str): The name of the ensemble learning tool.
-                         Options: 'Bagging', 'Boosting', 'Stacking'.
-        base_estimator: The base estimator for Bagging (default: None).
-        estimators: List of estimators for Stacking (default: None).
-    
-    Returns:
-        An instance of the corresponding ensemble learning tool.
-    
-    Raises:
-        ValueError: If the tool_name is not recognized.
-    """
-    ensemble_tools = {
-        'Bagging': lambda: BaggingClassifier(base_estimator=base_estimator),
-        'Boosting': lambda: GradientBoostingClassifier(),
-        'Stacking': lambda: StackingClassifier(estimators=estimators)
-    }
-
-    if tool_name not in ensemble_tools:
-        raise ValueError(f"Ensemble tool '{tool_name}' is not supported. Please choose from: {list(ensemble_tools.keys())}")
-
-    return ensemble_tools[tool_name]()
-
-
-from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
-from skopt import BayesSearchCV
-
-def hyperparameter_optimization_tool(tool_name: str, model, param_grid, X, y, cv=5, n_iter=10):
-    """
-    Choose a hyperparameter optimization tool based on the input tool name.
-
-    Args:
-        tool_name (str): The name of the optimization tool.
-                         Options: 'Grid Search', 'Random Search', 'Bayesian Optimization'.
-        model: The machine learning model to optimize.
-        param_grid (dict): The parameter grid to search over.
-        X (pd.DataFrame): Training data features.
-        y (pd.Series): Training data labels.
-        cv (int, optional): Number of cross-validation folds. Defaults to 5.
-        n_iter (int, optional): Number of iterations for Random Search or Bayesian Optimization. Defaults to 10.
-
-    Returns:
-        Optimized model after performing the selected hyperparameter search.
-    
-    Raises:
-        ValueError: If the tool_name is not recognized.
-    """
-    optimization_tools = {
-        'Grid Search': lambda: GridSearchCV(estimator=model, param_grid=param_grid, cv=cv),
-        'Random Search': lambda: RandomizedSearchCV(estimator=model, param_distributions=param_grid, n_iter=n_iter, cv=cv),
-        'Bayesian Optimization': lambda: BayesSearchCV(estimator=model, search_spaces=param_grid, n_iter=n_iter, cv=cv)
-    }
-
-    if tool_name not in optimization_tools:
-        raise ValueError(f"Optimization tool '{tool_name}' is not supported. Please choose from: {list(optimization_tools.keys())}")
-    
-    optimizer = optimization_tools[tool_name]()
-    optimizer.fit(X, y)
-    return optimizer.best_estimator_
-
-
-
 
 import pandas as pd
 import numpy as np

@@ -7,11 +7,10 @@ sys.path.append('..')
 sys.path.append('../..')
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-# from memory import Memory, transfer_text_to_json
 from memory import Memory
-from llm import OpenaiEmbeddings, LLM
+from llm import LLM
 from state import State
-from utils import load_config, read_image
+from utils import read_image
 from typing import List
 
 class ImageToTextTool:

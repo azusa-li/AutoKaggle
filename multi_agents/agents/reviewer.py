@@ -31,7 +31,7 @@ class Reviewer(Agent):
     def _merge_dicts(self, dicts: List[Dict[str, Any]], state: State) -> Dict[str, Any]:
         merged_dict = {"final_suggestion": {}, "final_score": {}}
 
-        # 定义需要统一的key
+        # define the keys to be unified
         if state.phase == 'Understand Background':
             key_mapping = {
                 "reader": "agent reader"
@@ -66,9 +66,9 @@ class Reviewer(Agent):
 
     def _generate_prompt_for_agents(self, state: State) -> List[str]:
         prompt_for_agents = []
-        evaluated_agents = list(state.memory[-1].keys()) # 获取过去state的memory中的所有agent
+        evaluated_agents = list(state.memory[-1].keys()) # get all agents in the previous state
         print(f"Evaluating agents: {evaluated_agents}")
-        for each_agent_memory in state.memory[-1].values(): # 取当前state的memory
+        for each_agent_memory in state.memory[-1].values(): # get the current state's memory
             role = each_agent_memory["role"]
             description = each_agent_memory["description"]
             task = each_agent_memory["task"]
@@ -79,9 +79,8 @@ class Reviewer(Agent):
         return prompt_for_agents
     
     def _execute(self, state: State, role_prompt: str) -> Dict[str, Any]:
-        # 实现评价功能
-        # 第二轮输入：state的memory中过去每个agent的role_description, task, input, result
-        # pdb.set_trace()
+        # implement the evaluation function
+        # the second round input: the role_description, task, input, result of each agent in the previous state
         prompt_for_agents = self._generate_prompt_for_agents(state)
         history = []
         all_raw_reply = []
@@ -94,7 +93,7 @@ class Reviewer(Agent):
                 input = prompt_for_agents[round//3 - 1]
             elif round % 3 == 2:
                 input = PROMPT_REVIEWER_ROUND2
-            raw_reply, history = self.llm.generate(input, history, max_tokens=4096)
+            raw_reply, history = self.llm.generate(input, history, max_completion_tokens=4096)
             if round % 3 == 2:
                 all_raw_reply.append(raw_reply)
             round += 1
@@ -109,7 +108,7 @@ class Reviewer(Agent):
                 # pdb.set_trace()
                 all_reply.append(reply)
 
-        # 保存history
+        # save history
         with open(f'{state.restore_dir}/{self.role}_history.json', 'w') as f:
             json.dump(history, f, indent=4)
         with open(f'{state.restore_dir}/{self.role}_reply.txt', 'w') as f:
@@ -118,11 +117,10 @@ class Reviewer(Agent):
         review = self._merge_dicts(all_reply, state)
         final_score = review['final_score']
         final_suggestion = review['final_suggestion']
-        # developer代码执行失败 评分为0
+        # developer code execution failed, score is 0
         if state.memory[-1].get("developer", {}).get("status", True) == False:
             final_score["agent developer"] = 0
             review["final_suggestion"]["agent developer"] = "The code execution failed. Please check the error message and write code again."
-        # pdb.set_trace()
         with open(f'{state.restore_dir}/review.json', 'w') as f:
             json.dump(review, f, indent=4)
 

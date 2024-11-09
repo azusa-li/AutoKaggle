@@ -48,10 +48,10 @@
         "Understand Background": [],
         "Preliminary Exploratory Data Analysis": [],
         "Data Cleaning": ["fill_missing_values", "remove_columns_with_missing_data", "detect_and_handle_outliers_zscore", 
-                            "detect_and_handle_outliers_iqr", "convert_data_types", "remove_duplicates"],
+                            "detect_and_handle_outliers_iqr", "convert_data_types", "remove_duplicates", "format_datetime"],
         "In-depth Exploratory Data Analysis": [],
         "Feature Engineering": [],
-        "Model Building, Validation, and Prediction": [""]
+        "Model Building, Validation, and Prediction": []
     },
     "_phase_to_ml_tools": {
         "Understand Background": [],

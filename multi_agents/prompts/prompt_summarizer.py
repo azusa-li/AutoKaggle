@@ -42,7 +42,7 @@ Your task is to design a series of questions that will be used to summarize the 
 The current competition phase is: {phase_name}  
 The next phase is: {next_phase_name}
 
-I will provide the competition information (COMPETITION INFO), the plan given by the planner for this phase (PLAN).
+I will provide the necessary information (INFO), the plan given by the planner for this phase (PLAN).
 
 Based on this information, design 6 key questions that are most worth focusing on and will be most helpful for the next phase. These questions should:
 1. Be targeted, specifically designed for the transition from {phase_name} to {next_phase_name}.
@@ -68,7 +68,7 @@ Let's work this out in a step by step way.
 
 #############
 # START DESIGN QUESTIONS #
-If you are ready, please request from me the COMPETITION INFO, PLAN.
+If you are ready, please request from me the INFO, PLAN.
 '''
 
 PROMPT_SUMMARIZER_REORGAINZE_QUESTIONS = '''
@@ -111,7 +111,7 @@ Currently, I am at phase: {phase_name}.
 # TASK #
 Please answer a series of questions that will help summarize the current phase.
 Your answer should be concise and detailed, for example, if the question is about how to clean data, your answer should be specific to each feature.
-I will provide the competition information (COMPETITION INFO), the plan given by the planner for this phase (PLAN), the code written by the developer in this phase and the output of the code execution (CODE AND OUTPUT), insight from images you generated (INSIGHT FROM VISUALIZATION), as well as the reviewer's evaluation of the planner's and developer's task completion for this phase (REVIEW).
+I will provide the necessary information (INFO), the plan given by the planner for this phase (PLAN), the code written by the developer in this phase and the output of the code execution (CODE AND OUTPUT), insight from images you generated (INSIGHT FROM VISUALIZATION), as well as the reviewer's evaluation of the planner's and developer's task completion for this phase (REVIEW).
 When answering each question, you can first consider which information you need to use, and then answer the question based on this information.
 
 #############
@@ -124,12 +124,14 @@ Let's work this out in a step by step way.
 
 #############
 # START ANSWER QUESTIONS #
-If you are ready, please request from me the COMPETITION INFO, PLAN, CODE AND OUTPUT, INSIGHT FROM VISUALIZATION, REVIEW.
+If you are ready, please request from me the INFO, PLAN, CODE AND OUTPUT, INSIGHT FROM VISUALIZATION, REVIEW.
 '''
 
 PROMPT_INFORMATION_FOR_ANSWER = '''
-# COMPETITION INFO #
-{competition_info}
+# INFO #
+{background_info}
+
+{state_info}
 
 #############
 # PLAN #
@@ -194,4 +196,65 @@ Which features were involved in this phase? What changes did they undergo? If an
 
 #############
 # START REORGANIZE QUESTIONS #
+'''
+
+PROMPT_SUMMARIZER_RESEARCH_REPORT = '''
+# TASK #
+Synthesize the previous phase reports into a comprehensive research report for the entire competition.
+
+#############
+# OBJECTIVE #
+Create a well-structured, coherent research report that:
+1. Summarizes the key findings and actions from each phase
+2. Shows the progression of the analysis throughout the competition
+3. Highlights important insights and decisions made at each phase
+4. Provides detailed explanations for the reasoning behind each significant action taken
+
+#############
+# INPUT #
+You will receive reports from each phase of the competition in a question-answer format. Request these reports before starting.
+
+#############
+# OUTPUT FORMAT #
+Provide your response in markdown format, following this structure:
+
+```markdown
+# COMPETITION RESEARCH REPORT
+
+## 1. PRELIMINARY EDA
+[Summarize key initial data exploration findings]
+[Explain any initial actions taken and the rationale behind them]
+
+## 2. DATA CLEANING
+[Outline main data cleaning steps]
+[For each significant cleaning action (e.g., feature deletion), provide a detailed explanation of why it was necessary]
+
+## 3. DEEP EDA
+[Present in-depth analysis findings and their implications]
+[Explain how these findings influenced subsequent decisions]
+
+## 4. FEATURE ENGINEERING
+[Describe feature creation/selection process]
+[For each new feature or significant modification, explain the reasoning and expected impact]
+
+## 5. MODEL BUILDING, VALIDATION, AND PREDICTION
+[Detail model development, evaluation, and final predictions]
+[Explain the rationale behind model choices and parameter tuning]
+
+## 6. CONCLUSION
+[Summarize overall approach, key insights, and results]
+[Reflect on the most impactful decisions made throughout the process]
+```
+
+#############
+# GUIDELINES #
+- Maintain a logical flow between sections
+- Highlight critical decisions and provide detailed explanations for their reasoning
+- Include relevant statistics and visualizations mentioned in the phase reports
+- Keep the language clear and concise, suitable for a technical audience
+- For each significant action (especially in data cleaning and feature engineering), provide a thorough explanation of why it was taken and its expected impact
+
+#############
+# START WRITING RESEARCH REPORT #
+To begin, please request the reports from each phase of the competition.
 '''

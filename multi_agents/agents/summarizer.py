@@ -53,7 +53,7 @@ class Summarizer(Agent):
         num_of_chosen_images = min(5, len(images))
         chosen_images = []
         input = PROMPT_SUMMARIZER_IMAGE_CHOOSE.format(phases_in_context=state.context, phase_name=state.phase, num=num_of_chosen_images+3, images=images_str)
-        raw_reply, _ = self.llm.generate(input, [], max_tokens=4096)
+        raw_reply, _ = self.llm.generate(input, [], max_completion_tokens=4096)
         with open(f'{state.restore_dir}/chosen_images_reply.txt', 'w') as f:
             f.write(raw_reply)
         try:
@@ -81,9 +81,25 @@ class Summarizer(Agent):
 
         return insight_from_visualization
 
+    def _generate_research_report(self, state: State) -> str:
+        previous_dirs = ['pre_eda', 'data_cleaning', 'deep_eda', 'feature_engineering', 'model_build_predict']
+        previous_report = ""
+        for dir in previous_dirs:
+            if os.path.exists(f'{state.competition_dir}/{dir}/report.txt'):
+                with open(f'{state.competition_dir}/{dir}/report.txt', 'r') as f:
+                    report = f.read()
+                    previous_report += f"## {dir.replace('_', ' ').upper()} ##\n{report}\n"
+
+        _, research_report_history = self.llm.generate(PROMPT_SUMMARIZER_RESEARCH_REPORT, [], max_completion_tokens=4096)
+        raw_research_report, research_report_history = self.llm.generate(previous_report, research_report_history, max_completion_tokens=4096)
+        try:
+            research_report = self._parse_markdown(raw_research_report)
+        except Exception as e:
+            research_report = raw_research_report
+        return research_report
 
     def _execute(self, state: State, role_prompt: str) -> Dict[str, Any]:
-        # 实现总结功能 阅读当前state的memory 生成report
+        # implement the summarizing function, read the current state's memory and generate report
         if state.memory[-1].get("developer", {}).get("status", True) == False:
             print(f"State {state.phase} - Agent {self.role} gives up summarizing because the code execution failed.")
             return {self.role: {"history": [], "report": ""}}
@@ -91,9 +107,9 @@ class Summarizer(Agent):
         history = []
         history.append({"role": "system", "content": f"{role_prompt} {self.description}"})
 
-        # 读取competition_info和plan
-        with open(f'{state.competition_dir}/competition_info.txt', 'r') as f:
-            competition_info = f.read()
+        # read background_info and plan
+        background_info = state.background_info
+        state_info = state.get_state_info()
         with open(f'{state.restore_dir}/markdown_plan.txt', 'r') as f:
             plan = f.read()
 
@@ -101,15 +117,15 @@ class Summarizer(Agent):
         design_questions_history = []
         next_phase_name = state.get_next_phase()
         input = PROMPT_SUMMARIZER_DESIGN_QUESITONS.format(phases_in_context=state.context, phase_name=state.phase, next_phase_name=next_phase_name)
-        _, design_questions_history = self.llm.generate(input, design_questions_history, max_tokens=4096)
+        _, design_questions_history = self.llm.generate(input, design_questions_history, max_completion_tokens=4096)
 
-        input = f"# COMPETITION INFO #\n{competition_info}\n#############\n# PLAN #\n{plan}"
-        design_questions_reply, design_questions_history = self.llm.generate(input, design_questions_history, max_tokens=4096)
+        input = f"# INFO #\n{background_info}\n{state_info}\n#############\n# PLAN #\n{plan}"
+        design_questions_reply, design_questions_history = self.llm.generate(input, design_questions_history, max_completion_tokens=4096)
         with open(f'{state.restore_dir}/design_questions_reply.txt', 'w') as f:
             f.write(design_questions_reply)
 
         input = PROMPT_SUMMARIZER_REORGAINZE_QUESTIONS
-        reorganize_questions_reply, design_questions_history = self.llm.generate(input, design_questions_history, max_tokens=4096)
+        reorganize_questions_reply, design_questions_history = self.llm.generate(input, design_questions_history, max_completion_tokens=4096)
         questions = self._parse_markdown(reorganize_questions_reply)
         with open(f'{state.restore_dir}/questions.txt', 'w') as f:
             f.write(questions)
@@ -120,21 +136,23 @@ class Summarizer(Agent):
             code = f.read()
         with open(f'{state.restore_dir}/{state.dir_name}_output.txt', 'r') as f:
             output = f.read()
+            if len(output) > 1000: # if the output is too long, truncate it
+                output = output[:1000]
         with open(f'{state.restore_dir}/review.json', 'r') as f:
             review = json.load(f)
 
         answer_questions_history = []
         input = PROMPT_SUMMARIZER_ANSWER_QUESTIONS.format(phases_in_context=state.context, phase_name=state.phase, questions=questions)
-        _, answer_questions_history = self.llm.generate(input, answer_questions_history, max_tokens=4096)
+        _, answer_questions_history = self.llm.generate(input, answer_questions_history, max_completion_tokens=4096)
         
         insight_from_visualization = self._get_insight_from_visualization(state)
-        input = PROMPT_INFORMATION_FOR_ANSWER.format(competition_info=competition_info, plan=plan, code=code, output=output, insight_from_visualization=insight_from_visualization, review=review)
-        answer_questions_reply, answer_questions_history = self.llm.generate(input, answer_questions_history, max_tokens=4096)
+        input = PROMPT_INFORMATION_FOR_ANSWER.format(background_info=background_info, state_info=state_info, plan=plan, code=code, output=output, insight_from_visualization=insight_from_visualization, review=review)
+        answer_questions_reply, answer_questions_history = self.llm.generate(input, answer_questions_history, max_completion_tokens=4096)
         with open(f'{state.restore_dir}/answer_questions_reply.txt', 'w') as f:
             f.write(answer_questions_reply)
 
         input = PROMPT_SUMMARIZER_REORGANIZE_ANSWERS
-        reorganize_answers_reply, answer_questions_history = self.llm.generate(input, answer_questions_history, max_tokens=4096)
+        reorganize_answers_reply, answer_questions_history = self.llm.generate(input, answer_questions_history, max_completion_tokens=4096)
         report = self._parse_markdown(reorganize_answers_reply)
         feature_info = self._get_feature_info(state)
         report = feature_info + report
@@ -142,7 +160,12 @@ class Summarizer(Agent):
             f.write(report)
         history.append(answer_questions_history)
 
-        # 保存history
+        if state.phase == 'Model Building, Validation, and Prediction':
+            research_report = self._generate_research_report(state)
+            with open(f'{state.competition_dir}/research_report.md', 'w') as f:
+                f.write(research_report)
+
+        # save history
         with open(f'{state.restore_dir}/{self.role}_history.json', 'w') as f:
             json.dump(history, f, indent=4)
 

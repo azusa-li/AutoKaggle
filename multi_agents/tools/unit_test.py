@@ -29,9 +29,7 @@ class TestTool:
         self.llm = LLM(model, type)
         self.memory = memory
         # self.summary_ducument = summary_ducument
-        # 不限制显示列数
         pd.set_option('display.max_columns', None)
-        # 不限制显示行数
         pd.set_option('display.max_rows', None)
 
     def execute_tests(self, state: State):
@@ -40,11 +38,11 @@ class TestTool:
         for func_name in test_function_names:
             if hasattr(self, func_name): # if the function exists
                 func = getattr(self, func_name)
-                result = func(state) # return 执行结果, 测试编号, 测试信息
+                result = func(state) # return execution result, test number, test information
                 if not result[0]: # if the test failed
                     not_pass_tests.append(result)
                     logger.info(f"Test '{func_name}' failed: {result[2]}")
-                    if func_name == 'test_document_exist': # 如果文件不存在 直接返回 不进行后续unit test
+                    if func_name == 'test_document_exist': # if the file does not exist, return directly without further unit test
                         return not_pass_tests
                 else:
                     logger.info(f"Test '{func_name}' succeeded") # assert result
@@ -316,14 +314,14 @@ Here is the information about the features of processed_test.csv:
         
         train_columns = pd.read_csv(path_train).columns
         test_columns = pd.read_csv(path_test).columns
-        target_column = [col for col in train_columns if col not in test_columns]
+        target_columns = [col for col in train_columns if col not in test_columns]
 
         # check if the target column is in the cleaned_train.csv
         df = pd.read_csv(path_cleaned_train)
-        if target_column[0] in df.columns:
-            return True, 17, "The target column is in the cleaned_train.csv file, please continue to the next step of the process"
+        if all(col in df.columns for col in target_columns):
+            return True, 17, "The target columns are in the cleaned_train.csv file, please continue to the next step of the process"
         else:
-            return False, 17, f"The target column {target_column[0]} is not in the cleaned_train.csv file, please reprocess it"
+            return False, 17, f"The target columns {target_columns} are not in the cleaned_train.csv file, please reprocess it"
         
     def test_cleaned_test_no_target_column(self, state: State):
         # read train.csv and test.csv
@@ -333,13 +331,15 @@ Here is the information about the features of processed_test.csv:
         
         train_columns = pd.read_csv(path_train).columns
         test_columns = pd.read_csv(path_test).columns
-        target_column = [col for col in train_columns if col not in test_columns]
+        target_columns = [col for col in train_columns if col not in test_columns]
 
         df = pd.read_csv(path_cleaned_test)
-        if target_column[0] in df.columns:
-            return False, 18, f"The target column {target_column[0]} is in the cleaned_test.csv file, please reprocess it"
+        target_columns_in_cleaned_test = [col for col in target_columns if col in df.columns]
+
+        if len(target_columns_in_cleaned_test) > 0:
+            return False, 18, f"The target columns {target_columns_in_cleaned_test} are in the cleaned_test.csv file, please reprocess it"
         else:
-            return True, 18, "The target column is not in the cleaned_test.csv file, please continue to the next step of the process"
+            return True, 18, "The target columns are not in the cleaned_test.csv file, please continue to the next step of the process"
         
     def test_processed_train_no_missing_target(self, state: State):
         # read train.csv and test.csv
@@ -349,14 +349,14 @@ Here is the information about the features of processed_test.csv:
         
         train_columns = pd.read_csv(path_train).columns
         test_columns = pd.read_csv(path_test).columns
-        target_column = [col for col in train_columns if col not in test_columns]
+        target_columns = [col for col in train_columns if col not in test_columns]
 
         # check if the target column is in the processed_train.csv
         df = pd.read_csv(path_processed_train)
-        if target_column[0] in df.columns:
-            return True, 19, "The target column is in the processed_train.csv file, please continue to the next step of the process"
+        if all(col in df.columns for col in target_columns):
+            return True, 19, "The target columns are in the processed_train.csv file, please continue to the next step of the process"
         else:
-            return False, 19, f"The target column {target_column[0]} is not in the processed_train.csv file, please reprocess it"
+            return False, 19, f"The target columns {target_columns} are not in the processed_train.csv file, please reprocess it"
 
     def test_processed_test_no_target_column(self, state: State):
         # read train.csv and test.csv
@@ -366,13 +366,15 @@ Here is the information about the features of processed_test.csv:
         
         train_columns = pd.read_csv(path_train).columns
         test_columns = pd.read_csv(path_test).columns
-        target_column = [col for col in train_columns if col not in test_columns]
+        target_columns = [col for col in train_columns if col not in test_columns]
 
         df = pd.read_csv(path_processed_test)
-        if target_column[0] in df.columns:
-            return False, 20, f"The target column {target_column[0]} is in the processed_test.csv file, please reprocess it"
+        target_columns_in_processed_test = [col for col in target_columns if col in df.columns]
+
+        if len(target_columns_in_processed_test) > 0:
+            return False, 20, f"The target columns {target_columns_in_processed_test} are in the processed_test.csv file, please reprocess it"
         else:
-            return True, 20, "The target column is not in the processed_test.csv file, please continue to the next step of the process"
+            return True, 20, "The target columns are not in the processed_test.csv file, please continue to the next step of the process"
         
     def test_cleaned_difference_train_test_columns(self, state: State):
         # test if the columns in cleaned_train.csv only has one more column than cleaned_test.csv, which is the target column
@@ -396,7 +398,7 @@ Here is the information about the features of processed_test.csv:
         test_only_columns = set(df_test.columns) - set(df_train.columns)
         
         if len(df_train.columns) == len(df_test.columns) + target_length and all(col in df_train.columns for col in target_columns):
-            return True, 21, "The cleaned_train.csv file has one more column than cleaned_test.csv, which is the target column, please continue to the next step of the process"
+            return True, 21, f"The cleaned_train.csv file has {target_length} more columns than cleaned_test.csv, which are the target columns {target_columns}, please continue to the next step of the process"
         else:
             error_message = f"The cleaned_train.csv file has different columns from cleaned_test.csv, please find the difference between the two files and find out the reason. cleaned_train.csv should only have {target_length} columns than cleaned_test.csv, which are the target columns {target_columns}.\n"
             # error_message += f"Features in cleaned_train.csv: {df_train.columns}.\n"
@@ -410,22 +412,25 @@ Here is the information about the features of processed_test.csv:
         path_test = f"{state.competition_dir}/test.csv"
         path_processed_train = f"{state.competition_dir}/processed_train.csv"
         path_processed_test = f"{state.competition_dir}/processed_test.csv"
+        path_sample_submission = f"{state.competition_dir}/sample_submission.csv"
 
         train_columns = pd.read_csv(path_train).columns
         test_columns = pd.read_csv(path_test).columns
-        target_column = [col for col in train_columns if col not in test_columns]
+        target_columns = [col for col in train_columns if col not in test_columns]
 
         df_train = pd.read_csv(path_processed_train)
         df_test = pd.read_csv(path_processed_test)
+        sample_submission = pd.read_csv(path_sample_submission)
+        target_length = len(sample_submission.columns) - 1
 
         # Find the differences in columns
         train_only_columns = set(df_train.columns) - set(df_test.columns)
         test_only_columns = set(df_test.columns) - set(df_train.columns)
 
-        if len(df_train.columns) == len(df_test.columns) + 1 and target_column[0] in df_train.columns and len(target_column) == 1:
-            return True, 22, "The processed_train.csv file has one more column than processed_test.csv, which is the target column, please continue to the next step of the process"
+        if len(df_train.columns) == len(df_test.columns) + target_length and all(col in df_train.columns for col in target_columns):
+            return True, 22, f"The processed_train.csv file has {target_length} more columns than processed_test.csv, which are the target columns {target_columns}, please continue to the next step of the process"
         else:
-            error_message = f"The processed_train.csv file has different columns from processed_test.csv, please find the difference between the two files and find out the reason. processed_train.csv should only have one more column than processed_test.csv, which is the target column {target_column[0]}.\n"
+            error_message = f"The processed_train.csv file has different columns from processed_test.csv, please find the difference between the two files and find out the reason. processed_train.csv should only have {target_length} more columns than processed_test.csv, which are the target columns {target_columns}.\n"
             # error_message += f"Features in processed_train.csv: {df_train.columns}.\n"
             # error_message += f"Features in processed_test.csv: {df_test.columns}.\n"
             error_message += f"Columns only in processed_train.csv: {train_only_columns}\n"
@@ -575,7 +580,7 @@ Here is the information about the features of processed_test.csv:
             reason += f"\n\nFirst 10 values in submission.csv ({submission_dtype}):\n{submission_values}"
         else: 
             result = "Valid"
-        # 比较两个 DataFrame 的第一列值是否相同
+        # compare the first column values of two DataFrames
         if result == "Valid":
             return True, 29, "submission.csv is valid."
         else:
@@ -621,6 +626,7 @@ Id,SalePrice
         df = pd.read_csv(path)
         
         # Check if any column name (case-insensitive) matches 'id'
+        # here can add an id columns set later and use any() function to check
         id_columns = [col for col in df.columns if (col.lower() == 'id' or col.lower() == 'passengerid')]
         
         if id_columns:
@@ -645,7 +651,7 @@ Id,SalePrice
         df = pd.read_csv(path)
         
         # Check if any column name (case-insensitive) matches 'id'
-        id_columns = [col for col in df.columns if (col.lower() == 'id' or 'id' in col.lower())]
+        id_columns = [col for col in df.columns if (col.lower() == 'id' or col.lower() == 'passengerid')]
         
         if id_columns:
             return True, 33, f"The processed_train.csv file contains an ID column: {id_columns[0]}"
@@ -657,7 +663,7 @@ Id,SalePrice
         df = pd.read_csv(path)
         
         # Check if any column name (case-insensitive) matches 'id'
-        id_columns = [col for col in df.columns if (col.lower() == 'id' or 'id' in col.lower())]
+        id_columns = [col for col in df.columns if (col.lower() == 'id' or col.lower() == 'passengerid')]
         
         if id_columns:
             return True, 34, f"The processed_test.csv file contains an ID column: {id_columns[0]}"
@@ -725,8 +731,5 @@ Id,SalePrice
             return False, 39, f"The submission.csv file has {len(submission_df)} rows, but the sample_submission.csv has {len(sample_df)} rows. Please ensure that your submission file includes predictions for all test samples."
 
 if __name__ == '__main__':
-    # llm = LLM('gpt-4o', 'api')
-    # reply, history = llm.generate('try me a joke', history=None)
-    # print(reply)
     test_tool = TestTool(memory=None, model='gpt-4o', type='api')
     test_tool._execute_tests()

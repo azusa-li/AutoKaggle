@@ -13,13 +13,12 @@ import tiktoken
 class LLM:
     def __init__(self, model: str, type: str):
         if type == 'api':
-            self.model = APIHandler(model)
+            self.api_handler = APIHandler(model)
         elif type == 'local':
             pass
 
-    def generate(self, prompt: str, history: list, max_tokens=4096) -> Tuple[str, list]:
-        # Generate text based on prompt
-        return multi_chat(self.model, prompt, history, max_tokens)
+    def generate(self, prompt: str, history: list, max_completion_tokens=4096) -> Tuple[str, list]:
+        return multi_chat(self.api_handler, prompt, history, max_completion_tokens)
     
 class OpenaiEmbeddings:
     def __init__(self, api_key: str, base_url: str = None, model: str = 'text-embedding-3-large'):
@@ -50,18 +49,3 @@ class OpenaiEmbeddings:
                 raise Exception('Embeddings generation failed!')
             
         return response.data
-
-
-def test_openai_embeddings():
-    api_key = 'your_api_key'
-    base_url = None
-
-    openai_embeddings = OpenaiEmbeddings(api_key, base_url)
-    inputs = ['Hello, world!', 'How are you?']
-    response = openai_embeddings.encode(inputs)
-    print(response)
-
-
-if __name__ == '__main__':
-    test_openai_embeddings()
-    pass

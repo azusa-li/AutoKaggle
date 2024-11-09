@@ -96,11 +96,12 @@ PROMPT_DEVELOPER = '''
 # CONTEXT #
 {phases_in_context}
 Currently, I am at phase: {phase_name}.
-{state_info}
 
 #############
-# COMPETITION INFORMATION #
-{competition_info}
+# INFORMATION #
+{background_info}
+
+{state_info}
 
 #############
 # PLAN #
@@ -142,11 +143,12 @@ PROMPT_DEVELOPER_WITH_EXPERIENCE_ROUND0_0 = '''
 # CONTEXT #
 {phases_in_context}
 Currently, I am at phase:{phase_name}.
-{state_info}
 
 #############
-# COMPETITION INFORMATION #
-{competition_info}
+# INFORMATION #
+{background_info}
+
+{state_info}
 
 #############
 # PLAN #

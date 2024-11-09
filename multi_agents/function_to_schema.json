@@ -286,7 +286,7 @@
     },
     "one_hot_encode": {
         "name": "one_hot_encode",
-        "description": "Perform one-hot encoding on specified categorical columns of a DataFrame.",
+        "description": "Perform one-hot encoding on specified categorical columns. The resulting columns will follow the format 'original_column_value'",
         "applicable_situations": "Encoding categorical variables with no ordinal relationship, especially useful for machine learning models that cannot handle categorical data directly (e.g., linear regression, neural networks). Best for categorical variables with relatively few unique categories.",
         "parameters": {
             "data": {
@@ -299,11 +299,6 @@
                     "type": "string"
                 },
                 "description": "Column label or list of column labels to encode."
-            },
-            "drop_original": {
-                "type": "boolean",
-                "description": "Whether to drop the original columns after encoding.",
-                "default": true
             },
             "handle_unknown": {
                 "type": "string",
@@ -332,15 +327,19 @@
                 "columns": "color"
             },
             "output": {
-                "color_blue": [0, 1, 0],
-                "color_green": [0, 0, 1],
-                "color_red": [1, 0, 0]
+                "data": {
+                    "color": ["red", "blue", "green"],
+                    "color_blue": [0, 1, 0],
+                    "color_green": [0, 0, 1],
+                    "color_red": [1, 0, 0]
+                },
+                "columns": ["color", "color_blue", "color_green", "color_red"]
             }
         }
     },
     "label_encode": {
         "name": "label_encode",
-        "description": "Perform label encoding on specified categorical columns of a DataFrame.",
+        "description": "Perform label encoding on specified categorical columns. The resulting columns will follow the format 'original_column_encoded'",
         "applicable_situations": "Encoding categorical variables with an ordinal relationship, or when the number of categories is large and one-hot encoding would lead to too many features. Useful for tree-based models that can handle categorical data.",
         "parameters": {
             "data": {
@@ -353,11 +352,6 @@
                     "type": "string"
                 },
                 "description": "Column label or list of column labels to encode."
-            },
-            "drop_original": {
-                "type": "boolean",
-                "description": "Whether to drop the original columns after encoding.",
-                "default": true
             }
         },
         "required": ["data", "columns"],
@@ -380,13 +374,17 @@
                 "columns": "fruit"
             },
             "output": {
-                "fruit_encoded": [0, 1, 0, 2]
+                "data": {
+                    "fruit": ["apple", "banana", "apple", "cherry"],
+                    "fruit_encoded": [0, 1, 0, 2]
+                },
+                "columns": ["fruit", "fruit_encoded"]
             }
         }
     },
     "frequency_encode": {
         "name": "frequency_encode",
-        "description": "Perform frequency encoding on specified categorical columns of a DataFrame.",
+        "description": "Perform frequency encoding on specified categorical columns. The resulting columns will follow the format 'original_column_freq'",
         "applicable_situations": "Encoding high-cardinality categorical variables, especially when the frequency of categories is informative. Useful for both tree-based and linear models.",
         "parameters": {
             "data": {
@@ -399,11 +397,6 @@
                     "type": "string"
                 },
                 "description": "Column label or list of column labels to encode."
-            },
-            "drop_original": {
-                "type": "boolean",
-                "description": "Whether to drop the original columns after encoding.",
-                "default": true
             }
         },
         "required": ["data", "columns"],
@@ -421,18 +414,22 @@
         "example": {
             "input": {
                 "data": {
-                    "city": ["New York", "London", "Paris", "New York", "London", "New York"]
+                    "fruit": ["apple", "banana", "apple", "cherry"]
                 },
-                "columns": "city"
+                "columns": "fruit"
             },
             "output": {
-                "city_freq": [0.50, 0.33, 0.17, 0.50, 0.33, 0.50]
+                "data": {
+                    "fruit": ["apple", "banana", "apple", "cherry"],
+                    "fruit_freq": [0.50, 0.25, 0.50, 0.25]
+                },
+                "columns": ["fruit", "fruit_freq"]
             }
         }
     },
     "target_encode": {
         "name": "target_encode",
-        "description": "Perform target encoding on specified categorical columns of a DataFrame.",
+        "description": "Perform target encoding on specified categorical columns. The resulting columns will follow the format 'original_column_target_enc'.",
         "applicable_situations": "Encoding categorical variables in supervised learning tasks, especially effective for high-cardinality features. Useful when there's a clear relationship between categories and the target variable.",
         "parameters": {
             "data": {
@@ -449,11 +446,6 @@
             "target": {
                 "type": "string",
                 "description": "The name of the target column in the DataFrame."
-            },
-            "drop_original": {
-                "type": "boolean",
-                "description": "Whether to drop the original columns after encoding.",
-                "default": true
             },
             "min_samples_leaf": {
                 "type": "integer",
@@ -482,14 +474,24 @@
         "example": {
             "input": {
                 "data": {
-                    "category": ["A", "B", "A", "C", "B", "A"],
-                    "target": [1, 0, 1, 1, 0, 0]
+                    "fruit": ["apple", "banana", "apple", "cherry", "banana", "apple", "cherry", "banana", "apple", "cherry", "kiwi"],
+                    "region": ["north", "north", "south", "south", "north", "south", "north", "south", "north", "north", "south"],
+                    "price": [1, 0, 1, 0, 2, 3, 1, 0, 1, 2, 3]
                 },
-                "columns": "category",
-                "target": "target"
+                "columns": ["fruit", "region"],
+                "target": "price",
+                "min_samples_leaf": 2,
+                "smoothing": 2.0
             },
             "output": {
-                "category_target_enc": [0.5000, 0.0000, 0.5000, 1.0000, 0.0000, 0.5000]
+                "data": {
+                    "fruit": ["apple", "banana", "apple", "cherry", "banana", "apple", "cherry", "banana", "apple", "cherry", "kiwi"],
+                    "region": ["north", "north", "south", "south", "north", "south", "north", "south", "north", "north", "south"],
+                    "price": [1, 0, 1, 0, 2, 3, 1, 0, 1, 2, 3],
+                    "fruit_target_enc": [1.437566, 0.912568, 1.437566, 0.796902, 0.912568, 1.437566, 0.796902, 0.912568, 1.437566, 0.796902, 1.750000],
+                    "region_target_enc": [1.509699, 1.509699, 1.250000, 1.250000, 1.509699, 1.250000, 1.509699, 1.250000, 1.509699, 1.509699, 1.250000]
+                },
+                "columns": ["fruit", "region", "price", "fruit_price_enc", "region_price_enc"]
             }
         }
     },
